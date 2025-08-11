@@ -1,0 +1,122 @@
+name: Package Validation
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  validate-metadata:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install validation tools
+      run: |
+        python -m pip install --upgrade pip
+        pip install build twine check-manifest pyroma
+
+    - name: Validate package metadata with pyroma
+      run: |
+        pyroma .
+
+    - name: Check MANIFEST.in and package contents
+      run: |
+        check-manifest --verbose
+
+  validate-readme:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install readme rendering tools
+      run: |
+        python -m pip install --upgrade pip
+        pip install readme-renderer[md] docutils
+
+    - name: Validate README rendering
+      run: |
+        python -m readme_renderer README.md -o /tmp/readme.html
+        echo "README renders successfully for PyPI"
+
+  validate-classifiers:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install trove-classifiers
+      run: |
+        python -m pip install --upgrade pip
+        pip install trove-classifiers
+
+    - name: Validate PyPI classifiers
+      run: |
+        python -c "
+        import tomllib
+        from trove_classifiers import classifiers
+
+        with open('pyproject.toml', 'rb') as f:
+            data = tomllib.load(f)
+
+        project_classifiers = data['project']['classifiers']
+        valid_classifiers = set(classifiers)
+
+        invalid = []
+        for classifier in project_classifiers:
+            if classifier not in valid_classifiers:
+                invalid.append(classifier)
+
+        if invalid:
+            print(f'Invalid classifiers found: {invalid}')
+            exit(1)
+        else:
+            print('All classifiers are valid!')
+        "
+
+  check-dependencies:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install pip-tools
+      run: |
+        python -m pip install --upgrade pip
+        pip install pip-tools pipdeptree
+
+    - name: Check dependency tree
+      run: |
+        pip install -e .
+        pipdeptree --warn silence
+
+        # Check for dependency conflicts
+        pip check
+
+    - name: Test Python 3.12 compatibility
+      run: |
+        python -c "import mcpcommander; print('✅ Compatible with Python 3.12')"

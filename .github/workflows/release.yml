@@ -1,0 +1,222 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v2.0.0)'
+        required: true
+        type: string
+      dry_run:
+        description: 'Dry run (do not actually publish)'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install build dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install build twine
+
+    - name: Determine version
+      id: version
+      run: |
+        if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          VERSION="${{ github.event.inputs.version }}"
+          TAG="${{ github.event.inputs.version }}"
+        else
+          TAG=${GITHUB_REF#refs/tags/}
+          VERSION=${TAG#v}
+        fi
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "tag=$TAG" >> $GITHUB_OUTPUT
+        echo "Building version: $VERSION"
+
+    - name: Update version in pyproject.toml
+      run: |
+        sed -i "s/version = \".*\"/version = \"${{ steps.version.outputs.version }}\"/" pyproject.toml
+        grep -n "version" pyproject.toml
+
+    - name: Build package
+      run: python -m build
+
+    - name: Check distribution
+      run: |
+        twine check dist/*
+        python -m tarfile -l dist/*.tar.gz
+        python -m zipfile -l dist/*.whl
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: dist-${{ steps.version.outputs.version }}
+        path: dist/
+        retention-days: 90
+
+  test-built-package:
+    runs-on: ${{ matrix.os }}
+    needs: build
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ["3.12"]
+
+    steps:
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Download build artifacts
+      uses: actions/download-artifact@v3
+      with:
+        name: dist-${{ needs.build.outputs.version }}
+        path: dist/
+
+    - name: Test wheel installation and functionality
+      shell: bash
+      run: |
+        python -m pip install --upgrade pip
+        pip install dist/*.whl
+
+        # Test CLI works
+        mcp --help
+        mcp version
+
+        # Test package imports
+        python -c "import mcpcommander; print(f'Version: {mcpcommander.__version__}')"
+        python -c "from mcpcommander import MCPManager; print('MCPManager import successful')"
+
+  publish-testpypi:
+    runs-on: ubuntu-latest
+    needs: [build, test-built-package]
+    if: startsWith(github.ref, 'refs/tags/') || github.event.inputs.dry_run == 'false'
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/mcp-commander
+    permissions:
+      id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
+
+    steps:
+    - name: Download build artifacts
+      uses: actions/download-artifact@v3
+      with:
+        name: dist-${{ needs.build.outputs.version }}
+        path: dist/
+
+    - name: Publish to TestPyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        repository-url: https://test.pypi.org/legacy/
+        verbose: true
+        print-hash: true
+
+    - name: Test installation from TestPyPI
+      run: |
+        sleep 60  # Wait for package to be available
+        python -m pip install --upgrade pip
+        pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ mcp-commander==${{ needs.build.outputs.version }}
+        mcp --help
+
+  publish-pypi:
+    runs-on: ubuntu-latest
+    needs: [build, test-built-package, publish-testpypi]
+    if: startsWith(github.ref, 'refs/tags/') && github.event.inputs.dry_run != 'true'
+    environment:
+      name: pypi
+      url: https://pypi.org/p/mcp-commander
+    permissions:
+      id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
+
+    steps:
+    - name: Download build artifacts
+      uses: actions/download-artifact@v3
+      with:
+        name: dist-${{ needs.build.outputs.version }}
+        path: dist/
+
+    - name: Publish to PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        verbose: true
+        print-hash: true
+
+  create-github-release:
+    runs-on: ubuntu-latest
+    needs: [build, publish-pypi]
+    if: startsWith(github.ref, 'refs/tags/') && github.event.inputs.dry_run != 'true'
+    permissions:
+      contents: write
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download build artifacts
+      uses: actions/download-artifact@v3
+      with:
+        name: dist-${{ needs.build.outputs.version }}
+        path: dist/
+
+    - name: Generate changelog
+      id: changelog
+      run: |
+        # Simple changelog from git commits since last tag
+        LAST_TAG=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || echo "")
+        if [[ -n "$LAST_TAG" ]]; then
+          CHANGELOG=$(git log --oneline --pretty=format:"- %s" $LAST_TAG..HEAD)
+        else
+          CHANGELOG=$(git log --oneline --pretty=format:"- %s" -n 20)
+        fi
+        echo "changelog<<EOF" >> $GITHUB_OUTPUT
+        echo "$CHANGELOG" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ needs.build.outputs.tag }}
+        name: Release ${{ needs.build.outputs.tag }}
+        body: |
+          ## Changes
+
+          ${{ steps.changelog.outputs.changelog }}
+
+          ## Installation
+
+          ```bash
+          pip install mcp-commander==${{ needs.build.outputs.version }}
+          ```
+
+          ## PyPI Links
+
+          - [PyPI Package](https://pypi.org/project/mcp-commander/${{ needs.build.outputs.version }}/)
+          - [Release Notes](https://github.com/${{ github.repository }}/releases/tag/${{ needs.build.outputs.tag }})
+        files: |
+          dist/*
+        draft: false
+        prerelease: ${{ contains(needs.build.outputs.version, 'rc') || contains(needs.build.outputs.version, 'beta') || contains(needs.build.outputs.version, 'alpha') }}
