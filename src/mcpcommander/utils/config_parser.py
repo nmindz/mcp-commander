@@ -26,7 +26,9 @@ class ServerConfigParser:
     """Parser for various MCP server configuration formats."""
 
     @staticmethod
-    def parse_server_config(config_input: str | dict[str, Any]) -> ServerConfig:
+    def parse_server_config(
+        config_input: str | dict[str, Any], env_vars: dict[str, str] | None = None
+    ) -> ServerConfig:
         """Parse server configuration from various input formats.
 
         Supported formats:
@@ -37,6 +39,7 @@ class ServerConfigParser:
 
         Args:
             config_input: Configuration input in various formats
+            env_vars: Optional environment variables to add to the configuration
 
         Returns:
             Validated ServerConfig object
@@ -47,11 +50,23 @@ class ServerConfigParser:
         try:
             # If it's already a dict, use it directly
             if isinstance(config_input, dict):
-                config_dict = config_input
+                config_dict = config_input.copy()
             elif isinstance(config_input, str):
                 config_dict = ServerConfigParser._parse_string_input(config_input)
             else:
                 raise ValidationError(f"Unsupported configuration type: {type(config_input)}")
+
+            # Add environment variables if provided
+            if env_vars:
+                # Merge with existing env vars if any
+                existing_env = config_dict.get("env", {})
+                if existing_env:
+                    # CLI options override existing env vars
+                    merged_env = existing_env.copy()
+                    merged_env.update(env_vars)
+                    config_dict["env"] = merged_env
+                else:
+                    config_dict["env"] = env_vars
 
             # Create and validate ServerConfig
             return ServerConfig(**config_dict)

@@ -8,11 +8,11 @@
   [![PyPI Version](https://img.shields.io/pypi/v/mcp-commander)](https://pypi.org/project/mcp-commander/)
   [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
   [![Python](https://img.shields.io/badge/Python-3.12%2B-blue.svg)](https://python.org/)
-  [![Code Style: Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+  [![Code Style: Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
   [![Pytest](https://img.shields.io/badge/Pytest-8.4-red.svg)](https://pytest.org/)
   [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](#)
   [![Coverage](https://img.shields.io/badge/coverage-85%25-green.svg)](#)
-  [![CLI Commands](https://img.shields.io/badge/CLI%20Commands-8-blue.svg)](#-commands)
+  [![CLI Commands](https://img.shields.io/badge/CLI%20Commands-12-blue.svg)](#-commands)
   [![Type Checking](https://img.shields.io/badge/mypy-enabled-blue.svg)](https://mypy-lang.org/)
 
 </div>
@@ -147,6 +147,44 @@ mcp add myserver "npx @modelcontextprotocol/server-filesystem /tmp" claude-code
 mcp add myserver "npx @modelcontextprotocol/server-filesystem /tmp"
 ```
 
+### 🌍 Environment Variable Support
+```bash
+# Copy environment variables from current environment
+export MCP_LOG_LEVEL=info
+export GIT_SIGN_COMMITS=false
+mcp add git-server "npx @cyanheads/git-mcp-server" --from-env=MCP_LOG_LEVEL,GIT_SIGN_COMMITS
+
+# Set explicit environment variables
+mcp add api-server "npx my-api-server" --env=DEBUG:true --env=API_KEY:secret123
+
+# Combine both approaches
+mcp add hybrid-server "npx server" --from-env=LOG_LEVEL --env=CUSTOM_VAR:custom_value
+
+# Use with JSON configuration (merges environment variables)
+mcp add json-server '{"command": "npx", "args": ["server"], "env": {"EXISTING": "value"}}' --env=NEW_VAR:added
+
+# Global verbose mode via environment variable
+export MCP_COMMANDER_VERBOSE=1
+mcp list  # Will run in verbose mode automatically
+```
+
+#### Generated Configuration
+When using environment variables, MCP Commander generates server configurations like this:
+```json
+{
+  "mcpServers": {
+    "git-mcp-server": {
+      "command": "npx",
+      "args": ["@cyanheads/git-mcp-server"],
+      "env": {
+        "MCP_LOG_LEVEL": "info",
+        "GIT_SIGN_COMMITS": "false"
+      }
+    }
+  }
+}
+```
+
 ### 🌍 NEW: Add to All Discovered Configurations
 ```bash
 # Automatically discover and install to ALL MCP configurations
@@ -169,6 +207,7 @@ mcp remove myserver cursor
 ```bash
 # Show help
 mcp --help
+mcp help  # Same as above
 
 # Show version
 mcp version

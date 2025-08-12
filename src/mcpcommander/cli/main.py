@@ -1,5 +1,8 @@
 """Modern CLI interface using typer."""
 
+from __future__ import annotations
+
+import builtins
 import os
 import sys
 from pathlib import Path
@@ -50,9 +53,69 @@ def get_unicode_chars() -> dict[str, str]:
 UNICODE_CHARS = get_unicode_chars()
 
 app = typer.Typer(help="MCP Commander - Cross-platform MCP server management", add_completion=False)
+
+
+# Check for environment variable verbose setting
+def is_verbose_from_env() -> bool:
+    """Check if verbose mode is enabled via environment variable."""
+    env_verbose = os.environ.get("MCP_COMMANDER_VERBOSE", "").lower()
+    return env_verbose in ("1", "true", "yes")
+
+
+# Global verbose setting
+VERBOSE_MODE = is_verbose_from_env()
 # Create console with cross-platform encoding support
 console = Console(legacy_windows=True, force_terminal=True)
 logger = get_logger(__name__)
+
+
+def _process_environment_options(
+    from_env: str | None, env_list: builtins.list[str]
+) -> builtins.dict[str, str]:
+    """Process --from-env and --env options into environment variable dictionary.
+
+    Args:
+        from_env: Comma-separated list of environment variable names to copy from current environment
+        env_list: List of KEY:value pairs for explicit environment variables
+
+    Returns:
+        Dictionary of environment variables
+
+    Raises:
+        typer.BadParameter: If environment variable parsing fails
+    """
+    env_vars: dict[str, str] = {}
+
+    # Process --from-env option
+    if from_env:
+        for env_name in from_env.split(","):
+            env_name = env_name.strip()
+            if env_name:
+                env_value = os.environ.get(env_name)
+                if env_value is not None:
+                    env_vars[env_name] = env_value
+                else:
+                    print(
+                        f"{Fore.YELLOW}⚠️  Environment variable '{env_name}' not found in current environment{Style.RESET_ALL}"
+                    )
+
+    # Process --env options
+    for env_pair in env_list:
+        if ":" not in env_pair:
+            raise typer.BadParameter(
+                f"Invalid --env format '{env_pair}'. Expected KEY:value format."
+            )
+
+        key, value = env_pair.split(":", 1)
+        key = key.strip()
+        value = value.strip()
+
+        if not key:
+            raise typer.BadParameter(f"Empty key in --env option '{env_pair}'")
+
+        env_vars[key] = value
+
+    return env_vars
 
 
 def help_callback(ctx: typer.Context, param: typer.CallbackParam, value: bool) -> None:
@@ -79,6 +142,14 @@ def add(
     server_config: str = typer.Argument(..., help="Server configuration (JSON or command path)"),
     editor: str | None = typer.Argument(None, help="Specific editor to add server to"),
     config: Path | None = typer.Option(None, "--config", "-c", help="Configuration file path"),
+    from_env: str | None = typer.Option(
+        None,
+        "--from-env",
+        help="Comma-separated environment variable names to copy from current environment",
+    ),
+    env: builtins.list[str] = typer.Option(
+        [], "--env", help="Environment variable in KEY:value format (can be used multiple times)"
+    ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
     help: bool = typer.Option(
         False,
@@ -90,12 +161,15 @@ def add(
     ),
 ) -> None:
     """Add MCP server to editors."""
-    if verbose:
+    if verbose or VERBOSE_MODE:
         configure_debug_logging()
 
     try:
+        # Process environment variable options
+        env_vars = _process_environment_options(from_env, env)
+
         manager = MCPManager(config)
-        result = manager.add_server(server_name, server_config, editor)
+        result = manager.add_server(server_name, server_config, editor, env_vars)
 
         if not result["failed"]:
             # All successful
@@ -114,7 +188,7 @@ def add(
         raise typer.Exit(1) from None
     except Exception as e:
         print(f"{Fore.RED}❌ Unexpected error: {e}{Style.RESET_ALL}")
-        if verbose:
+        if verbose or VERBOSE_MODE:
             logger.exception("Unexpected error in add command")
         raise typer.Exit(1) from e
 
@@ -123,6 +197,14 @@ def add(
 def add_all(
     server_name: str = typer.Argument(..., help="Name of the server"),
     server_config: str = typer.Argument(..., help="Server configuration (JSON or command path)"),
+    from_env: str | None = typer.Option(
+        None,
+        "--from-env",
+        help="Comma-separated environment variable names to copy from current environment",
+    ),
+    env: builtins.list[str] = typer.Option(
+        [], "--env", help="Environment variable in KEY:value format (can be used multiple times)"
+    ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
     help: bool = typer.Option(
         False,
@@ -134,12 +216,15 @@ def add_all(
     ),
 ) -> None:
     """Add MCP server to ALL discovered MCP configurations on the system."""
-    if verbose:
+    if verbose or VERBOSE_MODE:
         configure_debug_logging()
 
     try:
+        # Process environment variable options
+        env_vars = _process_environment_options(from_env, env)
+
         manager = MCPManager()
-        result = manager.add_server_to_all_discovered(server_name, server_config)
+        result = manager.add_server_to_all_discovered(server_name, server_config, env_vars)
 
         if result["discovered_count"] == 0:
             print(
@@ -169,7 +254,7 @@ def add_all(
         raise typer.Exit(1) from None
     except Exception as e:
         print(f"{Fore.RED}❌ Unexpected error: {e}{Style.RESET_ALL}")
-        if verbose:
+        if verbose or VERBOSE_MODE:
             logger.exception("Unexpected error in add-all command")
         raise typer.Exit(1) from e
 
@@ -190,7 +275,7 @@ def remove(
     ),
 ) -> None:
     """Remove MCP server from editors."""
-    if verbose:
+    if verbose or VERBOSE_MODE:
         configure_debug_logging()
 
     try:
@@ -214,7 +299,7 @@ def remove(
         raise typer.Exit(1) from None
     except Exception as e:
         print(f"{Fore.RED}❌ Unexpected error: {e}{Style.RESET_ALL}")
-        if verbose:
+        if verbose or VERBOSE_MODE:
             logger.exception("Unexpected error in remove command")
         raise typer.Exit(1) from e
 
@@ -234,7 +319,7 @@ def list(
     ),
 ) -> None:
     """List configured MCP servers."""
-    if verbose:
+    if verbose or VERBOSE_MODE:
         configure_debug_logging()
 
     try:
@@ -299,7 +384,7 @@ def list(
         raise typer.Exit(1) from None
     except Exception as e:
         print(f"{Fore.RED}❌ Unexpected error: {e}{Style.RESET_ALL}")
-        if verbose:
+        if verbose or VERBOSE_MODE:
             logger.exception("Unexpected error in list command")
         raise typer.Exit(1) from e
 
@@ -318,7 +403,7 @@ def status(
     ),
 ) -> None:
     """Show status of all editor configurations."""
-    if verbose:
+    if verbose or VERBOSE_MODE:
         configure_debug_logging()
 
     try:
@@ -370,7 +455,7 @@ def status(
         raise typer.Exit(1) from None
     except Exception as e:
         print(f"{Fore.RED}❌ Unexpected error: {e}{Style.RESET_ALL}")
-        if verbose:
+        if verbose or VERBOSE_MODE:
             logger.exception("Unexpected error in status command")
         raise typer.Exit(1) from e
 
@@ -388,7 +473,7 @@ def discover(
     ),
 ) -> None:
     """Discover all MCP configurations on the system."""
-    if verbose:
+    if verbose or VERBOSE_MODE:
         configure_debug_logging()
 
     try:
@@ -402,7 +487,7 @@ def discover(
         raise typer.Exit(1) from None
     except Exception as e:
         print(f"{Fore.RED}❌ Unexpected error: {e}{Style.RESET_ALL}")
-        if verbose:
+        if verbose or VERBOSE_MODE:
             logger.exception("Unexpected error in discover command")
         raise typer.Exit(1) from e
 
@@ -452,7 +537,7 @@ def add_editor(
     ),
 ) -> None:
     """Add support for a new editor."""
-    if verbose:
+    if verbose or VERBOSE_MODE:
         configure_debug_logging()
 
     try:
@@ -480,7 +565,7 @@ def add_editor(
         raise typer.Exit(1) from None
     except Exception as e:
         print(f"{Fore.RED}❌ Unexpected error: {e}{Style.RESET_ALL}")
-        if verbose:
+        if verbose or VERBOSE_MODE:
             logger.exception("Unexpected error in add-editor command")
         raise typer.Exit(1) from e
 
@@ -500,7 +585,7 @@ def remove_editor(
     ),
 ) -> None:
     """Remove support for an editor."""
-    if verbose:
+    if verbose or VERBOSE_MODE:
         configure_debug_logging()
 
     try:
@@ -527,7 +612,7 @@ def remove_editor(
         raise typer.Exit(1) from None
     except Exception as e:
         print(f"{Fore.RED}❌ Unexpected error: {e}{Style.RESET_ALL}")
-        if verbose:
+        if verbose or VERBOSE_MODE:
             logger.exception("Unexpected error in remove-editor command")
         raise typer.Exit(1) from e
 
@@ -573,6 +658,16 @@ def examples(
     except Exception as e:
         print(f"{Fore.RED}{UNICODE_CHARS['cross']} Error showing examples: {e}{Style.RESET_ALL}")
         raise typer.Exit(1) from e
+
+
+@app.command()
+def help() -> None:
+    """Show help information (alias for --help)."""
+    # Show help by calling the app with --help
+    import sys
+
+    sys.argv = [sys.argv[0], "--help"]
+    app()
 
 
 @app.command()

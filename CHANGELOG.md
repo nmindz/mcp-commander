@@ -7,6 +7,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2025-08-12
+
+### Added
+- **Environment Variable Support**: New `--from-env` and `--env` options for the `add` and `add-all` commands
+  - `--from-env`: Copy environment variables from current environment (e.g., `--from-env=MCP_LOG_LEVEL,GIT_SIGN_COMMITS`)
+  - `--env`: Set explicit environment variables with KEY:value format (e.g., `--env=DEBUG:true --env=API_KEY:secret123`)
+  - Smart merging: CLI options override existing environment variables in server configurations
+  - Warning messages for missing environment variables when using `--from-env`
+- **Enhanced CLI Functionality**: New `mcp help` command as an alias to `mcp --help`
+- **Global Verbose Mode**: Support for `MCP_COMMANDER_VERBOSE` environment variable
+  - Accepts values: `1`, `true`, or `"true"` (case-insensitive) to enable verbose mode globally
+  - Works in combination with `-v/--verbose` flags
+
+### Changed
+- **Code Quality Infrastructure**: Replaced Black + isort + flake8 with Ruff for unified linting and formatting
+  - Faster builds and consistent code style
+  - Updated README badge to reflect Ruff usage
+  - Simplified development dependencies
+- **Type Safety**: Enhanced type annotations with proper handling of built-in types to avoid MyPy conflicts
+- **CLI Help System**: Improved help display and command discovery
+
+### Technical Improvements
+- **Enhanced Server Configuration Parsing**: Extended to support environment variable injection
+- **Better Error Handling**: More descriptive error messages for environment variable parsing failures
+- **Test Coverage**: All new functionality covered by existing test suite (maintained 38%+ coverage)
+
+### Usage Examples
+```bash
+# Copy environment variables from current environment
+export MCP_LOG_LEVEL=info
+export GIT_SIGN_COMMITS=false
+mcp add git-server "npx @cyanheads/git-mcp-server" --from-env=MCP_LOG_LEVEL,GIT_SIGN_COMMITS
+
+# Set explicit environment variables
+mcp add api-server "npx my-api-server" --env=DEBUG:true --env=API_KEY:secret123
+
+# Combine both approaches
+mcp add hybrid-server "npx server" --from-env=LOG_LEVEL --env=CUSTOM_VAR:custom_value
+
+# Use with JSON configuration (merges environment variables)
+mcp add json-server '{"command": "npx", "args": ["server"], "env": {"EXISTING": "value"}}' --env=NEW_VAR:added
+
+# Global verbose mode via environment variable
+export MCP_COMMANDER_VERBOSE=1
+mcp list  # Will run in verbose mode automatically
+
+# Use new help alias
+mcp help  # Same as mcp --help
+```
+
+### Configuration Output
+Generated server configurations now include environment variables:
+```json
+{
+  "mcpServers": {
+    "git-mcp-server": {
+      "command": "npx",
+      "args": ["@cyanheads/git-mcp-server"],
+      "env": {
+        "MCP_LOG_LEVEL": "info",
+        "GIT_SIGN_COMMITS": "false"
+      }
+    }
+  }
+}
+```
+
 ## [0.1.0] - 2025-08-11
 
 ### Added
@@ -82,5 +149,6 @@ mcp remove my-server cursor
 mcp add --help --verbose
 ```
 
-[Unreleased]: https://github.com/nmindz/mcp-commander/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/nmindz/mcp-commander/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/nmindz/mcp-commander/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/nmindz/mcp-commander/releases/tag/v0.1.0
