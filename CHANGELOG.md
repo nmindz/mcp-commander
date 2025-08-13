@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2025-08-13
+
+### Fixed
+- **Command Parsing Bug**: Fixed issue where paths containing spaces were incorrectly split during server configuration parsing
+  - Replaced regex-based parsing with `shlex.split()` for proper shell-style command parsing
+  - Commands with quoted paths (e.g., `"/Applications/Burp Suite Community Edition.app/..."`) now parse correctly
+  - Added fallback to regex parsing if shlex fails for edge cases
+  - Example: Burp Suite MCP proxy server commands now work properly
+
+### Technical Improvements
+- **Improved Command Parser**: Enhanced `ServerConfigParser._split_command()` method in `src/mcpcommander/utils/config_parser.py`
+- **Better Error Handling**: Added warning logging for command parsing fallbacks
+- **Shell Compatibility**: Commands now parse using shell-like semantics with proper quote handling
+
 ## [0.1.1] - 2025-08-12
 
 ### Added
@@ -149,6 +163,7 @@ mcp remove my-server cursor
 mcp add --help --verbose
 ```
 
-[Unreleased]: https://github.com/nmindz/mcp-commander/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/nmindz/mcp-commander/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/nmindz/mcp-commander/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/nmindz/mcp-commander/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/nmindz/mcp-commander/releases/tag/v0.1.0

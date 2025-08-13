@@ -137,12 +137,84 @@ class ServerConfigParser:
 
     @staticmethod
     def _split_command(command_str: str) -> list[str]:
-        """Split command string into parts, handling quotes."""
-        # Simple regex-based parsing (could be enhanced with shlex for more complex cases)
+        """Split command string into parts, handling quotes and paths with spaces."""
+        import shlex
+
+        # First try direct shlex parsing
+        basic_result = shlex.split(command_str)
+
+        # Check if the result looks problematic (first token looks like a broken path)
+        if (
+            len(basic_result) > 1
+            and basic_result[0].startswith("/")
+            and not basic_result[0].endswith(("/", ".exe", ".bat"))
+            and ServerConfigParser._looks_like_broken_path(basic_result)
+        ):
+            # Try smart parsing instead
+            return ServerConfigParser._smart_split_with_auto_quoting(command_str)
+
+        return basic_result
+
+    @staticmethod
+    def _looks_like_broken_path(parts: list[str]) -> bool:
+        """Check if the split result looks like a broken path with spaces."""
+        if len(parts) < 2:
+            return False
+
+        first_part = parts[0]
+
+        # Signs this might be a broken path:
+        # 1. First part ends abruptly (not with a complete directory/file name)
+        # 2. Looking for common macOS app patterns
+        # 3. Common keywords that suggest a path was split incorrectly
+        return first_part.startswith("/Applications/") or (
+            first_part.count("/") > 2
+            and any(
+                keyword in " ".join(parts[:3]).lower()
+                for keyword in ["suite", "edition", "community", "program files"]
+            )
+        )
+
+    @staticmethod
+    def _smart_split_with_auto_quoting(command_str: str) -> list[str]:
+        """Intelligently split command by auto-quoting paths with spaces."""
+        import shlex
+
+        # Common patterns for executable paths that might contain spaces
+        executable_patterns = [
+            # macOS .app bundles with spaces in name: /Applications/Name With Spaces.app/Contents/...
+            r"^(/Applications/[^/]+(?:\s+[^/]+)*\.app/[^\s]+)",
+            # General Unix paths with spaces leading to common executables
+            r"^(/[^\s]+(?:\s+[^\s]+)+(?:/[^\s]*)*(?:java|python|node|bin)(?:\s|$))",
+            # Catch any path that starts with / and contains spaces, ending in common executable names
+            r"^(/[^/]*(?:\s+[^/]*)+[^/]*/(?:java|python|node|bin))",
+            # Windows Program Files
+            r"^(C:\\Program Files[^\\]*(?:\\[^\\]+)*)",
+        ]
+
+        # Try to detect and quote executable paths automatically
+        for pattern in executable_patterns:
+            match = re.match(pattern, command_str, re.IGNORECASE)
+            if match:
+                executable_path = match.group(1)
+                remainder = command_str[match.end() :].lstrip()
+
+                # Use single quotes to avoid conflicts with double quotes in the outer command
+                quoted_command = (
+                    f"'{executable_path}' {remainder}" if remainder else f"'{executable_path}'"
+                )
+
+                logger.info(f"Auto-quoting detected executable path with spaces: {executable_path}")
+
+                try:
+                    return shlex.split(quoted_command)
+                except ValueError:
+                    continue  # Try next pattern
+
+        # If no patterns match, fall back to basic regex splitting
+        logger.warning("Using fallback regex parsing - consider quoting paths with spaces manually")
         pattern = r'[^\s"\']+|"[^"]*"|\'[^\']*\''
         parts = re.findall(pattern, command_str)
-
-        # Remove quotes from quoted parts
         return [part.strip("'\"") for part in parts]
 
 

