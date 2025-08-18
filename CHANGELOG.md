@@ -7,6 +7,87 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] - 2025-08-18
+
+### Added
+- **Windsurf Editor Support**: Full support for Windsurf IDE with cross-platform path detection
+  - Windows: `%USERPROFILE%\.codeium\windsurf\mcp_config.json`
+  - macOS/Linux: `~/.codeium/windsurf/mcp_config.json`
+  - Automatic discovery and configuration management
+- **Self-Destruct Command**: New `mcp selfdestruct` command for resetting configuration
+  - `mcp selfdestruct`: Reset MCP Commander configuration to empty state (with confirmation)
+  - `mcp selfdestruct --include-backups`: Also remove all backup files
+  - `mcp selfdestruct --force`: Skip confirmation prompts
+  - Creates empty `{"editors": {}}` configuration for testing autodiscovery
+
+### Fixed
+- **Windows Path Resolution**: Complete fix for Windows path detection and configuration
+  - Fixed hardcoded Unix paths like `~/Library/Application Support` that failed on Windows
+  - Now uses proper Windows environment variables (`%USERPROFILE%`, `%APPDATA%`)
+  - All editor paths now resolve correctly on Windows:
+    - Claude Code: `C:\Users\{user}\.claude.json`
+    - Claude Desktop: `C:\Users\{user}\AppData\Roaming\Claude\claude_desktop_config.json`
+    - Cursor: `C:\Users\{user}\.cursor\mcp.json`
+    - VS Code: `C:\Users\{user}\AppData\Roaming\Code\User\mcp.json`
+    - Windsurf: `C:\Users\{user}\.codeium\windsurf\mcp_config.json`
+- **Discovery Command Enhancement**: `mcp discover` now populates configuration with discovered editors
+  - Previously was read-only report, now actively updates MCP Commander config file
+  - Shows discovered editors AND adds them to configuration
+  - Eliminates empty config after selfdestruct → discover workflow
+- **Configuration Schema**: Updated Pydantic validation to allow empty editors dict
+  - Enables `selfdestruct` command to create valid empty configurations
+  - Supports incremental configuration building via discovery
+
+### Changed
+- **Cross-Platform Configuration Generation**: Dynamic OS-specific path generation
+  - Removed dependency on static `config.example.json` template
+  - Runtime generation of appropriate paths based on current OS and environment
+  - Better Windows environment variable expansion (`%USERPROFILE%`, `%APPDATA%`)
+- **Discovery Workflow**: Enhanced discovery process for better user experience
+  - Discovery now shows report AND populates configuration automatically
+  - Clear feedback on what editors were added to configuration
+  - Improved workflow: `selfdestruct` → `discover` → `status` now works seamlessly
+
+### Technical Improvements
+- **Enhanced Path Resolution**: Updated discovery logic in `src/mcpcommander/utils/discovery.py`
+  - OS-specific environment variable detection and expansion
+  - Fallback mechanisms for missing environment variables
+  - Better error handling for permission issues
+- **Improved Configuration Management**: Enhanced config population logic
+  - Dynamic editor addition to configuration
+  - Proper validation and error handling
+  - Better logging and user feedback
+- **Schema Flexibility**: Updated validation to support development and testing workflows
+  - Allow empty configurations for reset scenarios
+  - Incremental configuration building support
+
+### Usage Examples
+```bash
+# Reset configuration to empty state (with confirmation)
+mcp selfdestruct
+
+# Reset and remove all backups (with confirmation)
+mcp selfdestruct --include-backups
+
+# Reset without prompts
+mcp selfdestruct --force
+
+# Discover and populate configuration with found editors
+mcp discover
+
+# Check populated configuration
+mcp status
+```
+
+### Workflow Improvements
+The complete reset and discovery workflow now works properly:
+
+1. **Reset**: `mcp selfdestruct` creates empty `{"editors": {}}` configuration
+2. **Discover**: `mcp discover` finds system editors AND adds them to config file  
+3. **Verify**: `mcp status` shows populated configuration with discovered editors
+
+This enables testing autodiscovery functionality and starting fresh with clean configuration.
+
 ## [0.1.2] - 2025-08-13
 
 ### Fixed
@@ -163,7 +244,8 @@ mcp remove my-server cursor
 mcp add --help --verbose
 ```
 
-[Unreleased]: https://github.com/nmindz/mcp-commander/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/nmindz/mcp-commander/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/nmindz/mcp-commander/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/nmindz/mcp-commander/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/nmindz/mcp-commander/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/nmindz/mcp-commander/releases/tag/v0.1.0

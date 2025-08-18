@@ -241,3 +241,7 @@ class MCPManager:
 *JIRA Epic: ZDEVOPS-208*
 - When you're working with Jira and you create tasks/stories/epics - You also need to link the Tasks to the Epic, not just the Stories.
 - When asked to "add a new feature", check if the feature already has a related task, if not, create it.
+
+- The `config.example.json` file is a reference for the user, not for the application. The application should generate its own config file (either empty or "discovered") from scratch based on the user's current environment and OS.
+- It's `mcp selfdestruct` to erase MCP Commander configuration only. It's `mcp selfdestruct --include-backups` to erase both config backups, otherwise backups are kept by default.
+- You should still ask the user to confirm, with a y/N prompt (N by default), like it used to, for destructive operations such as `mcp selfdestruct`

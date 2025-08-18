@@ -167,8 +167,7 @@ class MCPCommanderConfig(BaseModel):
 
     @field_validator("editors")
     def validate_editors(cls, v: dict[str, Any]) -> dict[str, Any]:
-        if not v:
-            raise ValueError("At least one editor must be configured")
+        # Allow empty editors dict for selfdestruct/reset scenarios
         return v
 
     def get_editor_names(self) -> list[str]:

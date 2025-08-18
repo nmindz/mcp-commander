@@ -33,6 +33,7 @@ class MCPDiscovery:
             ("claude-desktop", self._discover_claude_desktop),
             ("cursor", self._discover_cursor),
             ("vscode", self._discover_vscode),
+            ("windsurf", self._discover_windsurf),
             ("claude-cli", self._discover_claude_cli),
         ]
 
@@ -50,7 +51,17 @@ class MCPDiscovery:
 
     def _discover_claude_code(self) -> EditorConfig | None:
         """Discover Claude Code CLI configuration."""
-        claude_config = self.home / ".claude.json"
+        if self.system == "windows":
+            # Windows: Use USERPROFILE environment variable
+            user_profile = os.environ.get("USERPROFILE")
+            if user_profile:
+                claude_config = Path(user_profile) / ".claude.json"
+            else:
+                claude_config = self.home / ".claude.json"
+        else:
+            # macOS/Linux: Use home directory
+            claude_config = self.home / ".claude.json"
+        
         if claude_config.exists():
             return EditorConfig(config_path=str(claude_config), jsonpath="mcpServers")
         return None
@@ -66,7 +77,16 @@ class MCPDiscovery:
                 / "claude_desktop_config.json"
             )
         elif self.system == "windows":
-            config_path = Path(os.getenv("APPDATA", "")) / "Claude" / "claude_desktop_config.json"
+            appdata = os.environ.get("APPDATA")
+            if appdata:
+                config_path = Path(appdata) / "Claude" / "claude_desktop_config.json"
+            else:
+                # Fallback using USERPROFILE
+                user_profile = os.environ.get("USERPROFILE")
+                if user_profile:
+                    config_path = Path(user_profile) / "AppData" / "Roaming" / "Claude" / "claude_desktop_config.json"
+                else:
+                    config_path = self.home / "AppData" / "Roaming" / "Claude" / "claude_desktop_config.json"
         else:  # Linux
             config_path = self.home / ".config" / "Claude" / "claude_desktop_config.json"
 
@@ -76,78 +96,113 @@ class MCPDiscovery:
 
     def _discover_cursor(self) -> EditorConfig | None:
         """Discover Cursor configuration."""
+        # Primary location: ~/.cursor/mcp.json (most common)
+        if self.system == "windows":
+            user_profile = os.environ.get("USERPROFILE")
+            if user_profile:
+                primary_path = Path(user_profile) / ".cursor" / "mcp.json"
+            else:
+                primary_path = self.home / ".cursor" / "mcp.json"
+        else:
+            primary_path = self.home / ".cursor" / "mcp.json"
+        
+        # Alternative paths for different installation types
+        alt_paths = []
+        
         if self.system == "darwin":  # macOS
-            config_path = (
-                self.home
-                / "Library"
-                / "Application Support"
-                / "Cursor"
-                / "User"
-                / "globalStorage"
-                / "mcp.json"
-            )
+            alt_paths.extend([
+                self.home / "Library" / "Application Support" / "Cursor" / "User" / "globalStorage" / "mcp.json",
+                self.home / ".cursor" / "config.json",
+            ])
         elif self.system == "windows":
-            config_path = (
-                Path(os.getenv("APPDATA", "")) / "Cursor" / "User" / "globalStorage" / "mcp.json"
-            )
+            appdata = os.environ.get("APPDATA")
+            if appdata:
+                alt_paths.append(Path(appdata) / "Cursor" / "User" / "globalStorage" / "mcp.json")
+            alt_paths.extend([
+                primary_path.parent / "config.json",
+            ])
         else:  # Linux
-            config_path = self.home / ".config" / "Cursor" / "User" / "globalStorage" / "mcp.json"
+            alt_paths.extend([
+                self.home / ".config" / "Cursor" / "User" / "globalStorage" / "mcp.json",
+                self.home / ".cursor" / "config.json",
+            ])
 
-        # Also check alternative Cursor locations
-        alt_paths = [
-            self.home / ".cursor" / "mcp.json",
-            self.home / ".cursor" / "config.json",
-        ]
-
-        for path in [config_path] + alt_paths:
+        for path in [primary_path] + alt_paths:
             if path.exists():
                 return EditorConfig(config_path=str(path), jsonpath="mcpServers")
         return None
 
     def _discover_vscode(self) -> EditorConfig | None:
         """Discover VS Code configuration."""
+        paths_to_try = []
+        
         if self.system == "darwin":  # macOS
-            # Try the specific MCP config file first
-            mcp_config = (
-                self.home / "Library" / "Application Support" / "Code" / "User" / "mcp.json"
-            )
-            if mcp_config.exists():
-                return EditorConfig(config_path=str(mcp_config), jsonpath="servers")
-
-            # Fallback to settings.json
-            settings_config = (
-                self.home / "Library" / "Application Support" / "Code" / "User" / "settings.json"
-            )
-            if settings_config.exists():
-                return EditorConfig(config_path=str(settings_config), jsonpath="mcp.servers")
-
+            paths_to_try = [
+                (self.home / "Library" / "Application Support" / "Code" / "User" / "mcp.json", "servers"),
+                (self.home / "Library" / "Application Support" / "Code" / "User" / "settings.json", "mcp.servers"),
+            ]
         elif self.system == "windows":
-            # Try MCP config file first
-            mcp_config = Path(os.getenv("APPDATA", "")) / "Code" / "User" / "mcp.json"
-            if mcp_config.exists():
-                return EditorConfig(config_path=str(mcp_config), jsonpath="servers")
-
-            # Fallback to settings.json
-            settings_config = Path(os.getenv("APPDATA", "")) / "Code" / "User" / "settings.json"
-            if settings_config.exists():
-                return EditorConfig(config_path=str(settings_config), jsonpath="mcp.servers")
-
+            appdata = os.environ.get("APPDATA")
+            if appdata:
+                base_path = Path(appdata) / "Code" / "User"
+            else:
+                user_profile = os.environ.get("USERPROFILE")
+                if user_profile:
+                    base_path = Path(user_profile) / "AppData" / "Roaming" / "Code" / "User"
+                else:
+                    base_path = self.home / "AppData" / "Roaming" / "Code" / "User"
+            
+            paths_to_try = [
+                (base_path / "mcp.json", "servers"),
+                (base_path / "settings.json", "mcp.servers"),
+            ]
         else:  # Linux
-            # Try MCP config file first
-            mcp_config = self.home / ".config" / "Code" / "User" / "mcp.json"
-            if mcp_config.exists():
-                return EditorConfig(config_path=str(mcp_config), jsonpath="servers")
+            paths_to_try = [
+                (self.home / ".config" / "Code" / "User" / "mcp.json", "servers"),
+                (self.home / ".config" / "Code" / "User" / "settings.json", "mcp.servers"),
+            ]
+        
+        # Also check global user MCP config
+        if self.system == "windows":
+            user_profile = os.environ.get("USERPROFILE")
+            if user_profile:
+                paths_to_try.insert(0, (Path(user_profile) / ".mcp.json", "servers"))
+        else:
+            paths_to_try.insert(0, (self.home / ".mcp.json", "servers"))
 
-            # Fallback to settings.json
-            settings_config = self.home / ".config" / "Code" / "User" / "settings.json"
-            if settings_config.exists():
-                return EditorConfig(config_path=str(settings_config), jsonpath="mcp.servers")
+        for config_path, jsonpath in paths_to_try:
+            if config_path.exists():
+                return EditorConfig(config_path=str(config_path), jsonpath=jsonpath)
 
+        return None
+
+    def _discover_windsurf(self) -> EditorConfig | None:
+        """Discover Windsurf IDE configuration."""
+        if self.system == "windows":
+            user_profile = os.environ.get("USERPROFILE")
+            if user_profile:
+                windsurf_config = Path(user_profile) / ".codeium" / "windsurf" / "mcp_config.json"
+            else:
+                windsurf_config = self.home / ".codeium" / "windsurf" / "mcp_config.json"
+        else:
+            # macOS and Linux use the same path
+            windsurf_config = self.home / ".codeium" / "windsurf" / "mcp_config.json"
+        
+        if windsurf_config.exists():
+            return EditorConfig(config_path=str(windsurf_config), jsonpath="mcpServers")
         return None
 
     def _discover_claude_cli(self) -> EditorConfig | None:
         """Discover Claude CLI configuration."""
-        cli_config = self.home / ".clauderc.json"
+        if self.system == "windows":
+            user_profile = os.environ.get("USERPROFILE")
+            if user_profile:
+                cli_config = Path(user_profile) / ".clauderc.json"
+            else:
+                cli_config = self.home / ".clauderc.json"
+        else:
+            cli_config = self.home / ".clauderc.json"
+        
         if cli_config.exists():
             return EditorConfig(config_path=str(cli_config), jsonpath="mcpServers")
         return None

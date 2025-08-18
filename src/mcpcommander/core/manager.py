@@ -263,6 +263,26 @@ class MCPManager:
         discovered = self.discover_mcp_configs()
         self.discovery.print_discovery_report(discovered)
 
+    def populate_config_with_discovered(self) -> dict[str, str]:
+        """Populate configuration with discovered MCP editors."""
+        discovered = self.discover_mcp_configs()
+        
+        # If no discoveries, return empty result
+        if not discovered:
+            return {}
+        
+        # Add discovered editors to config
+        added_editors = {}
+        for editor_name, editor_config in discovered.items():
+            try:
+                self.config_manager.add_editor(editor_name, editor_config)
+                added_editors[editor_name] = str(editor_config.config_path)
+                logger.info(f"Added discovered editor '{editor_name}' to configuration")
+            except Exception as e:
+                logger.error(f"Failed to add discovered editor '{editor_name}': {e}")
+        
+        return added_editors
+
     def get_available_editors(self) -> list[str]:
         """Get list of available editor names."""
         return self.config_manager.get_available_editors()

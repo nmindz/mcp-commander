@@ -115,45 +115,59 @@ def ensure_user_config() -> Path:
     if migrated:
         return migrated
 
-    # If no user config exists, create from example
+    # If no user config exists, create OS-appropriate default config
     if not user_config_file.exists():
-        # Try to find example config in the package
-        example_paths = [
-            # In repository
-            Path(__file__).parent.parent.parent.parent / "config.example.json",
-            # In installed package
-            Path(__file__).parent.parent.parent / "config.example.json",
-        ]
+        logger.info("Creating OS-appropriate default config")
+        # Create OS-specific default configuration
+        if sys.platform == "win32":
+            config_paths = {
+                    "claude-code": "%USERPROFILE%\\.claude.json",
+                    "claude-desktop": "%APPDATA%\\Claude\\claude_desktop_config.json",
+                    "cursor": "%USERPROFILE%\\.cursor\\mcp.json",
+                    "vscode": "%APPDATA%\\Code\\User\\mcp.json",
+                    "windsurf": "%USERPROFILE%\\.codeium\\windsurf\\mcp_config.json"
+                }
+        elif sys.platform == "darwin":  # macOS
+            config_paths = {
+                    "claude-code": "~/.claude.json",
+                    "claude-desktop": "~/Library/Application Support/Claude/claude_desktop_config.json",
+                    "cursor": "~/.cursor/mcp.json",
+                    "vscode": "~/Library/Application Support/Code/User/mcp.json",
+                    "windsurf": "~/.codeium/windsurf/mcp_config.json"
+                }
+        else:  # Linux
+            config_paths = {
+                    "claude-code": "~/.claude.json",
+                    "claude-desktop": "~/.config/Claude/claude_desktop_config.json",
+                    "cursor": "~/.cursor/mcp.json",
+                    "vscode": "~/.config/Code/User/mcp.json",
+                    "windsurf": "~/.codeium/windsurf/mcp_config.json"
+                }
 
-        example_config = None
-        for example_path in example_paths:
-            if example_path.exists():
-                example_config = example_path
-                break
-
-        if example_config:
-            logger.info(f"Creating user config from example: {example_config}")
-            content = example_config.read_text(encoding="utf-8")
-            user_config_file.write_text(content, encoding="utf-8")
-        else:
-            # Create minimal default config
-            logger.info("Creating minimal default config")
-            default_config = """{
-  "editors": {
-    "claude-code": {
-      "config_path": "~/.claude.json",
+        default_config = f"""{{
+  "editors": {{
+    "claude-code": {{
+      "config_path": "{config_paths["claude-code"]}",
       "jsonpath": "mcpServers"
-    },
-    "claude-desktop": {
-      "config_path": "~/Library/Application Support/Claude/claude_desktop_config.json",
+    }},
+    "claude-desktop": {{
+      "config_path": "{config_paths["claude-desktop"]}",
       "jsonpath": "mcpServers"
-    },
-    "cursor": {
-      "config_path": "~/.cursor/mcp.json",
+    }},
+    "cursor": {{
+      "config_path": "{config_paths["cursor"]}",
       "jsonpath": "mcpServers"
-    }
-  }
-}"""
-            user_config_file.write_text(default_config, encoding="utf-8")
+    }},
+    "vscode": {{
+      "config_path": "{config_paths["vscode"]}",
+      "jsonpath": "servers"
+    }},
+    "windsurf": {{
+      "config_path": "{config_paths["windsurf"]}",
+      "jsonpath": "mcpServers"
+    }}
+  }}
+}}"""
+        user_config_file.write_text(default_config, encoding="utf-8")
 
     return user_config_file

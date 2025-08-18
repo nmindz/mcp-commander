@@ -12,7 +12,7 @@
   [![Pytest](https://img.shields.io/badge/Pytest-8.4-red.svg)](https://pytest.org/)
   [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](#)
   [![Coverage](https://img.shields.io/badge/coverage-85%25-green.svg)](#)
-  [![CLI Commands](https://img.shields.io/badge/CLI%20Commands-12-blue.svg)](#-commands)
+  [![CLI Commands](https://img.shields.io/badge/CLI%20Commands-13-blue.svg)](#-commands)
   [![Type Checking](https://img.shields.io/badge/mypy-enabled-blue.svg)](https://mypy-lang.org/)
 
 </div>
@@ -20,7 +20,7 @@
 ## 🚀 Features
 
 ### Core MCP Operations
-- **Multi-Editor Support**: Manage MCP servers for Claude Code, Claude Desktop, Cursor, and VS Code
+- **Multi-Editor Support**: Manage MCP servers for Claude Code, Claude Desktop, Cursor, VS Code, and Windsurf
 - **Flexible Server Management**: Add, remove, and list servers across all or specific editors
 - **Status Monitoring**: Check configuration file status and server counts
 - **Rich CLI Interface**: Colorized output with tables and status indicators
@@ -130,6 +130,18 @@ mcp status
 
 # List available editors
 mcp editors
+```
+
+### 💣 Configuration Reset
+```bash
+# Reset configuration to empty state (with confirmation)
+mcp selfdestruct
+
+# Reset configuration and remove all backups
+mcp selfdestruct --include-backups
+
+# Reset without confirmation prompts
+mcp selfdestruct --force
 ```
 
 ### 📝 Server Management
@@ -343,11 +355,37 @@ mcp-commander/
 - Cross-platform (macOS, Windows, Linux)
 - Rich CLI output with colorized formatting
 
-## 🆕 What's New in v2.0
+## 🆕 What's New in v0.1.3
+
+### 🪟 **Enhanced Windows Support**
+- **Fixed Path Resolution**: Complete fix for Windows path detection
+  - No more hardcoded Unix paths like `~/Library/Application Support`
+  - Proper Windows environment variables (`%USERPROFILE%`, `%APPDATA%`)
+  - All editors now work correctly on Windows
+
+### 💣 **Configuration Reset**
+- **New `selfdestruct` Command**: Reset MCP Commander to clean state
+  - `mcp selfdestruct`: Reset configuration with confirmation
+  - `mcp selfdestruct --include-backups`: Also remove all backups
+  - `mcp selfdestruct --force`: Skip confirmation prompts
+  - Perfect for testing autodiscovery functionality
+
+### 🎯 **Enhanced Discovery Workflow**
+- **Active Configuration Population**: `mcp discover` now updates your config
+  - Previously was read-only, now actively populates configuration
+  - Complete workflow: `selfdestruct` → `discover` → `status`
+  - No more empty config files after discovery
+
+### 🚀 **New Editor Support**
+- **Windsurf IDE**: Full support for Codeium's Windsurf editor
+  - Cross-platform path detection and configuration
+  - Automatic discovery and management
+
+## 🔄 Migration from Previous Versions
 
 ### 🔍 **Auto-Discovery System**
 - Automatically finds all MCP configurations on your system
-- Supports Claude Code, Claude Desktop, Cursor, VS Code, and more
+- Supports Claude Code, Claude Desktop, Cursor, VS Code, Windsurf, and more
 - Cross-platform detection (macOS, Windows, Linux)
 
 ### 🌍 **Add-All Command**

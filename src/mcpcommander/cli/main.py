@@ -480,6 +480,17 @@ def discover(
     try:
         manager = MCPManager()
         manager.print_discovery_report()
+        
+        # Populate config with discovered editors
+        added_editors = manager.populate_config_with_discovered()
+        
+        if added_editors:
+            print(f"\n{Fore.CYAN}✅ Updated MCP Commander configuration:{Style.RESET_ALL}")
+            for editor_name, config_path in added_editors.items():
+                print(f"  + {editor_name.upper():<15} {config_path}")
+            print(f"\n{Fore.GREEN}Run 'mcp status' to see the updated configuration.{Style.RESET_ALL}")
+        else:
+            print(f"\n{Fore.YELLOW}No editors were added to configuration (they may already exist).{Style.RESET_ALL}")
 
     except MCPCommanderError as e:
         print(f"{Fore.RED}❌ Error: {e}{Style.RESET_ALL}")
@@ -981,6 +992,92 @@ def backup_config(
         print(f"{Fore.RED}❌ Unexpected error: {e}{Style.RESET_ALL}")
         if verbose or VERBOSE_MODE:
             logger.exception("Unexpected error in backup-config command")
+        raise typer.Exit(1) from e
+
+
+@app.command()
+def selfdestruct(
+    include_backups: bool = typer.Option(False, "--include-backups", help="Also remove all backup files"),
+    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
+    help: bool = typer.Option(
+        False,
+        "--help",
+        callback=help_callback,
+        expose_value=False,
+        is_eager=True,
+        help="Show this message and exit.",
+    ),
+) -> None:
+    """Reset MCP Commander configuration to default (empty) state for testing autodiscovery."""
+    if verbose or VERBOSE_MODE:
+        configure_debug_logging()
+
+    try:
+        from mcpcommander.utils.paths import get_user_config_file, get_user_config_dir
+        from mcpcommander.core.backup import BackupManager
+        
+        config_file = get_user_config_file()
+        config_dir = get_user_config_dir()
+        
+        # Show what will be removed
+        print(f"{Fore.CYAN}💣 Self-Destruct Configuration:{Style.RESET_ALL}")
+        print(f"  Config file: {config_file}")
+        
+        if include_backups:
+            backup_manager = BackupManager()
+            backup_dir = backup_manager.backup_root
+            print(f"  Backup directory: {backup_dir}")
+            print(f"{Fore.YELLOW}  WARNING: All backup files will be permanently removed!{Style.RESET_ALL}")
+        else:
+            print(f"{Fore.GREEN}  Backups will be preserved{Style.RESET_ALL}")
+        
+        # Confirm action 
+        if not force:
+            action_text = "reset configuration to empty state"
+            if include_backups:
+                action_text += " and remove all backups"
+            
+            if not confirm_action(f"Proceed to {action_text}?"):
+                print(f"{Fore.YELLOW}Self-destruct cancelled.{Style.RESET_ALL}")
+                raise typer.Exit(0)
+        
+        # Remove config file if it exists
+        if config_file.exists():
+            config_file.unlink()
+            print(f"{Fore.GREEN}✅ Removed configuration file: {config_file}{Style.RESET_ALL}")
+        else:
+            print(f"{Fore.YELLOW}Configuration file not found: {config_file}{Style.RESET_ALL}")
+        
+        # Create empty config file for clean state
+        empty_config = '{\n  "editors": {}\n}'
+        config_file.write_text(empty_config, encoding="utf-8")
+        print(f"{Fore.GREEN}✅ Created empty configuration file: {config_file}{Style.RESET_ALL}")
+        
+        # Remove backups if requested
+        if include_backups:
+            backup_manager = BackupManager()
+            backup_dir = backup_manager.backup_root
+            
+            if backup_dir.exists():
+                import shutil
+                shutil.rmtree(backup_dir)
+                print(f"{Fore.GREEN}✅ Removed backup directory: {backup_dir}{Style.RESET_ALL}")
+            else:
+                print(f"{Fore.YELLOW}No backup directory found: {backup_dir}{Style.RESET_ALL}")
+        
+        print(f"\n{Fore.CYAN}🔄 Self-destruct complete!{Style.RESET_ALL}")
+        print(f"{Fore.WHITE}You can now run 'mcp discover' to test autodiscovery functionality.{Style.RESET_ALL}")
+        
+    except MCPCommanderError as e:
+        print(f"{Fore.RED}❌ Error: {e}{Style.RESET_ALL}")
+        if e.details:
+            print(f"{Fore.YELLOW}   Details: {e.details}{Style.RESET_ALL}")
+        raise typer.Exit(1) from None
+    except Exception as e:
+        print(f"{Fore.RED}❌ Unexpected error: {e}{Style.RESET_ALL}")
+        if verbose or VERBOSE_MODE:
+            logger.exception("Unexpected error in selfdestruct command")
         raise typer.Exit(1) from e
 
 
