@@ -1,5 +1,6 @@
 """Pydantic schemas for configuration validation."""
 
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
@@ -179,3 +180,50 @@ class MCPCommanderConfig(BaseModel):
         if name not in self.editors:
             raise ValueError(f"Unknown editor: {name}")
         return self.editors[name]
+
+
+class BackupInfo(BaseModel):
+    """Schema for backup information."""
+    
+    backup_id: str = Field(..., description="Unique backup identifier")
+    timestamp: datetime = Field(..., description="Backup creation timestamp")
+    editor_name: str | None = Field(None, description="Specific editor name if single-editor backup")
+    description: str = Field(..., description="Backup description")
+    files_backed_up: list[str] = Field(default_factory=list, description="List of editor names backed up")
+
+    @field_validator("backup_id")
+    def validate_backup_id(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("Backup ID cannot be empty")
+        return v.strip()
+
+    @property
+    def is_single_editor(self) -> bool:
+        """Check if this is a single editor backup."""
+        return self.editor_name is not None
+
+    @property
+    def display_name(self) -> str:
+        """Get display name for the backup."""
+        if self.editor_name:
+            return f"{self.editor_name} backup"
+        else:
+            return "All editors backup"
+
+    @property
+    def formatted_timestamp(self) -> str:
+        """Get formatted timestamp string."""
+        return self.timestamp.strftime("%Y-%m-%d %H:%M:%S")
+
+
+class BackupConfig(BaseModel):
+    """Schema for backup configuration."""
+    
+    max_backups: int = Field(10, description="Maximum number of backups to keep", ge=1)
+    backups: list[BackupInfo] = Field(default_factory=list, description="List of backup information")
+
+    @field_validator("max_backups")
+    def validate_max_backups(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("Maximum backups must be at least 1")
+        return v

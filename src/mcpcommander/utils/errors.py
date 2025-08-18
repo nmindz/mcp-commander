@@ -49,3 +49,9 @@ class DiscoveryError(MCPCommanderError):
     """Raised when MCP configuration discovery fails."""
 
     pass
+
+
+class BackupError(MCPCommanderError):
+    """Raised when backup/restore operations fail."""
+
+    pass

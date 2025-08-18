@@ -5,12 +5,13 @@ from typing import Any
 
 from colorama import Fore, Style, init
 
+from mcpcommander.core.backup import BackupManager
 from mcpcommander.core.config import ConfigManager
 from mcpcommander.core.editor_handlers import EditorHandlerFactory
-from mcpcommander.schemas.config_schema import EditorConfig
+from mcpcommander.schemas.config_schema import BackupInfo, EditorConfig
 from mcpcommander.utils.config_parser import ServerConfigParser
 from mcpcommander.utils.discovery import MCPDiscovery
-from mcpcommander.utils.errors import ConfigurationError, EditorError
+from mcpcommander.utils.errors import BackupError, ConfigurationError, EditorError
 from mcpcommander.utils.logger import get_logger
 
 # Initialize colorama
@@ -27,6 +28,7 @@ class MCPManager:
         self.config_manager = ConfigManager(config_path)
         self.editor_factory = EditorHandlerFactory()
         self.discovery = MCPDiscovery()
+        self.backup_manager = BackupManager(self.config_manager.config_path)
         logger.info("MCPManager initialized")
 
     def add_server(
@@ -344,3 +346,194 @@ class MCPManager:
             print(
                 f"\n{Fore.GREEN}🎉 Server '{server_name}' is now available in {len(successful)} MCP configuration(s){Style.RESET_ALL}"
             )
+
+    # Backup and Restore Methods
+    
+    def create_backup(
+        self,
+        editor_name: str | None = None,
+        description: str | None = None
+    ) -> BackupInfo:
+        """Create a backup of MCP configurations.
+        
+        Args:
+            editor_name: Specific editor to backup, None for all editors
+            description: Optional description for the backup
+            
+        Returns:
+            BackupInfo: Information about the created backup
+            
+        Raises:
+            BackupError: If backup creation fails
+        """
+        try:
+            # Get editor configurations
+            editor_configs = {}
+            if editor_name:
+                # Single editor backup
+                if editor_name not in self.get_available_editors():
+                    raise BackupError(f"Unknown editor: {editor_name}")
+                editor_configs[editor_name] = self.config_manager.get_editor_config(editor_name)
+            else:
+                # All editors backup
+                for name in self.get_available_editors():
+                    editor_configs[name] = self.config_manager.get_editor_config(name)
+                    
+            # Create the backup
+            backup_info = self.backup_manager.create_backup(
+                editor_configs=editor_configs,
+                editor_name=editor_name,
+                description=description
+            )
+            
+            # Print success message
+            if editor_name:
+                print(f"{Fore.GREEN}✅ Created backup for {editor_name}: {backup_info.backup_id}{Style.RESET_ALL}")
+            else:
+                editors_count = len(backup_info.files_backed_up)
+                print(f"{Fore.GREEN}✅ Created backup for {editors_count} editor(s): {backup_info.backup_id}{Style.RESET_ALL}")
+                
+            return backup_info
+            
+        except Exception as e:
+            logger.error(f"Failed to create backup: {e}")
+            raise BackupError(f"Failed to create backup: {e}") from e
+
+    def list_backups(self, editor_name: str | None = None) -> list[BackupInfo]:
+        """List available backups.
+        
+        Args:
+            editor_name: Filter by specific editor name
+            
+        Returns:
+            List of backup information
+        """
+        try:
+            return self.backup_manager.list_backups(editor_name)
+        except Exception as e:
+            logger.error(f"Failed to list backups: {e}")
+            raise BackupError(f"Failed to list backups: {e}") from e
+
+    def restore_backup(
+        self,
+        backup_id: str,
+        force: bool = False
+    ) -> dict[str, str]:
+        """Restore a backup.
+        
+        Args:
+            backup_id: ID of the backup to restore
+            force: Skip confirmation prompts
+            
+        Returns:
+            Dict mapping editor names to restore status messages
+            
+        Raises:
+            BackupError: If restore operation fails
+        """
+        try:
+            # Get current editor configurations for validation
+            editor_configs = {}
+            for name in self.get_available_editors():
+                editor_configs[name] = self.config_manager.get_editor_config(name)
+                
+            # Restore the backup
+            results = self.backup_manager.restore_backup(
+                backup_id=backup_id,
+                editor_configs=editor_configs,
+                force=force
+            )
+            
+            # Print results
+            successful = []
+            failed = []
+            
+            for editor_name, message in results.items():
+                print(f"  {message}")
+                if message.startswith("✅"):
+                    successful.append(editor_name)
+                else:
+                    failed.append(editor_name)
+                    
+            # Print summary
+            if successful and not failed:
+                print(f"\n{Fore.GREEN}✅ Successfully restored backup {backup_id}{Style.RESET_ALL}")
+            elif successful and failed:
+                print(f"\n{Fore.YELLOW}⚠️  Partially restored backup {backup_id} ({len(successful)}/{len(results)} editors){Style.RESET_ALL}")
+            else:
+                print(f"\n{Fore.RED}❌ Failed to restore backup {backup_id}{Style.RESET_ALL}")
+                
+            return results
+            
+        except Exception as e:
+            logger.error(f"Failed to restore backup {backup_id}: {e}")
+            raise BackupError(f"Failed to restore backup {backup_id}: {e}") from e
+
+    def delete_backup(self, backup_id: str) -> None:
+        """Delete a backup.
+        
+        Args:
+            backup_id: ID of the backup to delete
+            
+        Raises:
+            BackupError: If deletion fails
+        """
+        try:
+            self.backup_manager.delete_backup(backup_id)
+            print(f"{Fore.GREEN}✅ Deleted backup: {backup_id}{Style.RESET_ALL}")
+        except Exception as e:
+            logger.error(f"Failed to delete backup {backup_id}: {e}")
+            raise BackupError(f"Failed to delete backup {backup_id}: {e}") from e
+
+    def get_backup_info(self, backup_id: str) -> BackupInfo | None:
+        """Get detailed information about a backup.
+        
+        Args:
+            backup_id: ID of the backup
+            
+        Returns:
+            BackupInfo if found, None otherwise
+        """
+        try:
+            return self.backup_manager.get_backup_info(backup_id)
+        except Exception as e:
+            logger.error(f"Failed to get backup info for {backup_id}: {e}")
+            return None
+
+    def set_max_backups(self, max_backups: int) -> None:
+        """Set the maximum number of backups to keep.
+        
+        Args:
+            max_backups: Maximum number of backups (must be >= 1)
+            
+        Raises:
+            ConfigurationError: If max_backups is invalid
+        """
+        try:
+            self.backup_manager.set_max_backups(max_backups)
+            print(f"{Fore.GREEN}✅ Set maximum backups to {max_backups}{Style.RESET_ALL}")
+        except Exception as e:
+            logger.error(f"Failed to set max backups: {e}")
+            raise ConfigurationError(f"Failed to set max backups: {e}") from e
+
+    def get_backup_stats(self) -> dict[str, Any]:
+        """Get backup statistics.
+        
+        Returns:
+            Dictionary with backup statistics
+        """
+        try:
+            return self.backup_manager.get_backup_stats()
+        except Exception as e:
+            logger.error(f"Failed to get backup stats: {e}")
+            return {
+                "total_backups": 0,
+                "max_backups": 10,
+                "total_size_bytes": 0,
+                "total_size_mb": 0.0,
+                "backup_directory": str(self.backup_manager.backup_dir),
+                "editor_counts": {},
+                "oldest_backup": None,
+                "newest_backup": None,
+                "error": str(e)
+            }

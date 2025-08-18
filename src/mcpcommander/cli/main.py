@@ -17,6 +17,7 @@ from mcpcommander import __version__
 from mcpcommander.core.manager import MCPManager
 from mcpcommander.utils.cli_examples import print_command_examples, should_show_examples
 from mcpcommander.utils.errors import MCPCommanderError
+from mcpcommander.utils.interactive import confirm_action, get_backup_description, select_backup
 from mcpcommander.utils.logger import configure_debug_logging, get_logger
 
 # Initialize colorama and rich with proper Windows support
@@ -668,6 +669,319 @@ def help() -> None:
 
     sys.argv = [sys.argv[0], "--help"]
     app()
+
+
+@app.command()
+def backup(
+    editor: str | None = typer.Argument(None, help="Specific editor to backup (or all if not specified)"),
+    description: str | None = typer.Option(None, "--description", "-d", help="Description for the backup"),
+    interactive: bool = typer.Option(True, "--interactive/--no-interactive", help="Ask for description interactively"),
+    config: Path | None = typer.Option(None, "--config", "-c", help="Configuration file path"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
+    help: bool = typer.Option(
+        False,
+        "--help",
+        callback=help_callback,
+        expose_value=False,
+        is_eager=True,
+        help="Show this message and exit.",
+    ),
+) -> None:
+    """Create a backup of MCP configurations."""
+    if verbose or VERBOSE_MODE:
+        configure_debug_logging()
+
+    try:
+        # Get description interactively if not provided and interactive mode is enabled
+        if not description and interactive:
+            desc_input = get_backup_description()
+            if desc_input:
+                description = desc_input
+
+        manager = MCPManager(config)
+        backup_info = manager.create_backup(editor_name=editor, description=description)
+
+        # Show backup details
+        print(f"\n{Fore.CYAN}📦 Backup Details:{Style.RESET_ALL}")
+        print(f"  ID: {backup_info.backup_id}")
+        print(f"  Timestamp: {backup_info.formatted_timestamp}")
+        print(f"  Description: {backup_info.description}")
+        print(f"  Files: {', '.join(backup_info.files_backed_up)}")
+
+    except MCPCommanderError as e:
+        print(f"{Fore.RED}❌ Error: {e}{Style.RESET_ALL}")
+        if e.details:
+            print(f"{Fore.YELLOW}   Details: {e.details}{Style.RESET_ALL}")
+        raise typer.Exit(1) from None
+    except Exception as e:
+        print(f"{Fore.RED}❌ Unexpected error: {e}{Style.RESET_ALL}")
+        if verbose or VERBOSE_MODE:
+            logger.exception("Unexpected error in backup command")
+        raise typer.Exit(1) from e
+
+
+@app.command()
+def restore(
+    backup_id: str | None = typer.Argument(None, help="Backup ID to restore (interactive selection if not provided)"),
+    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompts"),
+    config: Path | None = typer.Option(None, "--config", "-c", help="Configuration file path"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
+    help: bool = typer.Option(
+        False,
+        "--help",
+        callback=help_callback,
+        expose_value=False,
+        is_eager=True,
+        help="Show this message and exit.",
+    ),
+) -> None:
+    """Restore a backup of MCP configurations."""
+    if verbose or VERBOSE_MODE:
+        configure_debug_logging()
+
+    try:
+        manager = MCPManager(config)
+
+        # If no backup_id provided, show interactive selection
+        if not backup_id:
+            backups = manager.list_backups()
+            if not backups:
+                print(f"{Fore.YELLOW}No backups available to restore.{Style.RESET_ALL}")
+                raise typer.Exit(0)
+
+            selected_backup = select_backup(backups, "Select backup to restore")
+            if not selected_backup:
+                print(f"{Fore.YELLOW}Restore cancelled.{Style.RESET_ALL}")
+                raise typer.Exit(0)
+
+            backup_id = selected_backup.backup_id
+
+        # Get backup info
+        backup_info = manager.get_backup_info(backup_id)
+        if not backup_info:
+            print(f"{Fore.RED}❌ Backup not found: {backup_id}{Style.RESET_ALL}")
+            raise typer.Exit(1)
+
+        # Show backup details and confirm
+        print(f"\n{Fore.CYAN}📦 Restoring Backup:{Style.RESET_ALL}")
+        print(f"  ID: {backup_info.backup_id}")
+        print(f"  Timestamp: {backup_info.formatted_timestamp}")
+        print(f"  Description: {backup_info.description}")
+        print(f"  Files: {', '.join(backup_info.files_backed_up)}")
+
+        if not force:
+            if not confirm_action("Proceed with restore? This will overwrite existing configurations"):
+                print(f"{Fore.YELLOW}Restore cancelled.{Style.RESET_ALL}")
+                raise typer.Exit(0)
+
+        # Perform restore
+        print(f"\n{Fore.CYAN}🔄 Restoring configurations...{Style.RESET_ALL}")
+        results = manager.restore_backup(backup_id, force=force)
+
+        print(f"\n{Fore.CYAN}📊 Restore completed.{Style.RESET_ALL}")
+
+    except MCPCommanderError as e:
+        print(f"{Fore.RED}❌ Error: {e}{Style.RESET_ALL}")
+        if e.details:
+            print(f"{Fore.YELLOW}   Details: {e.details}{Style.RESET_ALL}")
+        raise typer.Exit(1) from None
+    except Exception as e:
+        print(f"{Fore.RED}❌ Unexpected error: {e}{Style.RESET_ALL}")
+        if verbose or VERBOSE_MODE:
+            logger.exception("Unexpected error in restore command")
+        raise typer.Exit(1) from e
+
+
+@app.command("backup-list")
+def backup_list(
+    editor: str | None = typer.Argument(None, help="Filter by specific editor"),
+    config: Path | None = typer.Option(None, "--config", "-c", help="Configuration file path"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
+    help: bool = typer.Option(
+        False,
+        "--help",
+        callback=help_callback,
+        expose_value=False,
+        is_eager=True,
+        help="Show this message and exit.",
+    ),
+) -> None:
+    """List available backups."""
+    if verbose or VERBOSE_MODE:
+        configure_debug_logging()
+
+    try:
+        manager = MCPManager(config)
+        backups = manager.list_backups(editor)
+
+        if not backups:
+            if editor:
+                print(f"{Fore.YELLOW}No backups found for {editor}.{Style.RESET_ALL}")
+            else:
+                print(f"{Fore.YELLOW}No backups found.{Style.RESET_ALL}")
+            return
+
+        # Create backup table
+        table = Table(title=f"Available Backups{f' for {editor}' if editor else ''}", box=box.ROUNDED)
+        table.add_column("Backup ID", style="cyan")
+        table.add_column("Timestamp", style="blue")
+        table.add_column("Type", style="magenta")
+        table.add_column("Files", style="green")
+        table.add_column("Description", style="yellow")
+
+        for backup in backups:
+            backup_type = backup.display_name
+            files_info = ", ".join(backup.files_backed_up) if backup.files_backed_up else "None"
+            
+            table.add_row(
+                backup.backup_id,
+                backup.formatted_timestamp,
+                backup_type,
+                files_info,
+                backup.description
+            )
+
+        console.print(table)
+
+        # Show stats
+        stats = manager.get_backup_stats()
+        print(f"\n{Fore.CYAN}📊 Backup Statistics:{Style.RESET_ALL}")
+        print(f"  Total backups: {stats['total_backups']}")
+        print(f"  Maximum backups: {stats['max_backups']}")
+        print(f"  Storage used: {stats['total_size_mb']} MB")
+        print(f"  Backup directory: {stats['backup_directory']}")
+
+    except MCPCommanderError as e:
+        print(f"{Fore.RED}❌ Error: {e}{Style.RESET_ALL}")
+        if e.details:
+            print(f"{Fore.YELLOW}   Details: {e.details}{Style.RESET_ALL}")
+        raise typer.Exit(1) from None
+    except Exception as e:
+        print(f"{Fore.RED}❌ Unexpected error: {e}{Style.RESET_ALL}")
+        if verbose or VERBOSE_MODE:
+            logger.exception("Unexpected error in backup-list command")
+        raise typer.Exit(1) from e
+
+
+@app.command("backup-delete")
+def backup_delete(
+    backup_id: str | None = typer.Argument(None, help="Backup ID to delete (interactive selection if not provided)"),
+    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt"),
+    config: Path | None = typer.Option(None, "--config", "-c", help="Configuration file path"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
+    help: bool = typer.Option(
+        False,
+        "--help",
+        callback=help_callback,
+        expose_value=False,
+        is_eager=True,
+        help="Show this message and exit.",
+    ),
+) -> None:
+    """Delete a backup."""
+    if verbose or VERBOSE_MODE:
+        configure_debug_logging()
+
+    try:
+        manager = MCPManager(config)
+
+        # If no backup_id provided, show interactive selection
+        if not backup_id:
+            backups = manager.list_backups()
+            if not backups:
+                print(f"{Fore.YELLOW}No backups available to delete.{Style.RESET_ALL}")
+                raise typer.Exit(0)
+
+            selected_backup = select_backup(backups, "Select backup to delete")
+            if not selected_backup:
+                print(f"{Fore.YELLOW}Delete cancelled.{Style.RESET_ALL}")
+                raise typer.Exit(0)
+
+            backup_id = selected_backup.backup_id
+
+        # Get backup info
+        backup_info = manager.get_backup_info(backup_id)
+        if not backup_info:
+            print(f"{Fore.RED}❌ Backup not found: {backup_id}{Style.RESET_ALL}")
+            raise typer.Exit(1)
+
+        # Confirm deletion
+        if not force:
+            print(f"\n{Fore.CYAN}📦 Backup to Delete:{Style.RESET_ALL}")
+            print(f"  ID: {backup_info.backup_id}")
+            print(f"  Timestamp: {backup_info.formatted_timestamp}")
+            print(f"  Description: {backup_info.description}")
+
+            if not confirm_action(f"Delete backup {backup_id}? This cannot be undone"):
+                print(f"{Fore.YELLOW}Delete cancelled.{Style.RESET_ALL}")
+                raise typer.Exit(0)
+
+        # Delete backup
+        manager.delete_backup(backup_id)
+
+    except MCPCommanderError as e:
+        print(f"{Fore.RED}❌ Error: {e}{Style.RESET_ALL}")
+        if e.details:
+            print(f"{Fore.YELLOW}   Details: {e.details}{Style.RESET_ALL}")
+        raise typer.Exit(1) from None
+    except Exception as e:
+        print(f"{Fore.RED}❌ Unexpected error: {e}{Style.RESET_ALL}")
+        if verbose or VERBOSE_MODE:
+            logger.exception("Unexpected error in backup-delete command")
+        raise typer.Exit(1) from e
+
+
+@app.command("backup-config")
+def backup_config(
+    max_backups: int | None = typer.Option(None, "--max-backups", help="Set maximum number of backups to keep"),
+    show: bool = typer.Option(False, "--show", help="Show current backup configuration"),
+    config: Path | None = typer.Option(None, "--config", "-c", help="Configuration file path"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
+    help: bool = typer.Option(
+        False,
+        "--help",
+        callback=help_callback,
+        expose_value=False,
+        is_eager=True,
+        help="Show this message and exit.",
+    ),
+) -> None:
+    """Configure backup settings."""
+    if verbose or VERBOSE_MODE:
+        configure_debug_logging()
+
+    try:
+        manager = MCPManager(config)
+
+        if max_backups is not None:
+            # Set maximum backups
+            manager.set_max_backups(max_backups)
+
+        if show or max_backups is None:
+            # Show current configuration
+            stats = manager.get_backup_stats()
+            
+            print(f"{Fore.CYAN}📊 Backup Configuration:{Style.RESET_ALL}")
+            print(f"  Maximum backups: {stats['max_backups']}")
+            print(f"  Current backups: {stats['total_backups']}")
+            print(f"  Storage used: {stats['total_size_mb']} MB")
+            print(f"  Backup directory: {stats['backup_directory']}")
+            
+            if stats['editor_counts']:
+                print(f"\n{Fore.CYAN}📝 Editor Backup Counts:{Style.RESET_ALL}")
+                for editor, count in stats['editor_counts'].items():
+                    print(f"  {editor}: {count} backup(s)")
+
+    except MCPCommanderError as e:
+        print(f"{Fore.RED}❌ Error: {e}{Style.RESET_ALL}")
+        if e.details:
+            print(f"{Fore.YELLOW}   Details: {e.details}{Style.RESET_ALL}")
+        raise typer.Exit(1) from None
+    except Exception as e:
+        print(f"{Fore.RED}❌ Unexpected error: {e}{Style.RESET_ALL}")
+        if verbose or VERBOSE_MODE:
+            logger.exception("Unexpected error in backup-config command")
+        raise typer.Exit(1) from e
 
 
 @app.command()
