@@ -7,7 +7,9 @@
       "Bash(ruff check:*)",
       "Bash(ruff format:*)",
       "Bash(timeout 30 python -m pytest:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ],
     "deny": [],
     "ask": []

@@ -245,3 +245,332 @@ class MCPManager:
 - The `config.example.json` file is a reference for the user, not for the application. The application should generate its own config file (either empty or "discovered") from scratch based on the user's current environment and OS.
 - It's `mcp config reset` to erase MCP Commander configuration only. It's `mcp config reset --include-backups` to erase both config backups, otherwise backups are kept by default.
 - You should still ask the user to confirm, with a y/N prompt (N by default), like it used to, for destructive operations such as `mcp config reset`
+
+## GUI Implementation - Qt6/PySide6 with PyOneDark Theme
+
+### Overview
+MCP Commander GUI provides a modern, professional graphical interface using Qt6 (PySide6) with the PyOneDark theme, offering complete feature parity with the CLI while enhancing user experience through visual feedback and intuitive interactions.
+
+### Design Principles & Guidelines
+
+#### Core Principles
+1. **Feature Parity**: Every CLI command must have a GUI equivalent
+2. **Visual Feedback**: All operations provide immediate visual feedback (progress bars, animations, notifications)
+3. **Non-Blocking UI**: Long operations run asynchronously to maintain responsive interface
+4. **Consistent Theme**: Strict adherence to PyOneDark dark theme aesthetics
+5. **Backend Reuse**: GUI must use existing core.manager and schemas, not duplicate logic
+6. **Cross-Platform**: Must work identically on Windows, macOS, and Linux
+7. **Accessibility**: Keyboard shortcuts for all major operations
+8. **Error Recovery**: Graceful error handling with user-friendly messages
+
+#### Visual Design Standards
+- **Color Palette**:
+  - Background: #282c34 (main), #21252b (sidebar)
+  - Primary: #61afef (blue)
+  - Success: #98c379 (green)
+  - Warning: #e5c07b (yellow)
+  - Error: #e06c75 (red)
+  - Accent: #c678dd (purple), #e06c75 (pink)
+- **Typography**: 
+  - Font: Segoe UI (Windows), SF Pro (macOS), Ubuntu (Linux)
+  - Sizes: 16px (headers), 14px (body), 12px (captions)
+- **Spacing**: 8px grid system
+- **Border Radius**: 8px for cards, 4px for buttons
+- **Shadows**: Subtle drop shadows for depth
+
+### GUI Architecture
+
+#### Directory Structure
+```
+src/mcpcommander/gui/
+├── __init__.py                 # GUI module initialization
+├── app.py                      # Application entry point (QApplication)
+├── main_window.py              # Main window implementation
+├── themes/
+│   ├── __init__.py
+│   ├── pyonedark.py           # PyOneDark theme QSS and palette
+│   ├── resources.qrc          # Qt resource file
+│   └── icons/                 # SVG icons (light colors for dark theme)
+├── widgets/
+│   ├── __init__.py
+│   ├── sidebar.py             # Collapsible navigation sidebar
+│   ├── circular_progress.py   # Custom circular progress widget
+│   ├── toggle_switch.py       # iOS-style toggle switches
+│   ├── custom_buttons.py      # Styled buttons with ripple effect
+│   ├── data_table.py          # Enhanced QTableWidget
+│   └── toast.py               # Toast notification widget
+├── pages/
+│   ├── __init__.py
+│   ├── base_page.py           # Base class for all pages
+│   ├── dashboard.py           # Home/overview page
+│   ├── servers.py             # Server management page
+│   ├── editors.py             # Editor configuration page
+│   ├── backup.py              # Backup & restore page
+│   ├── discovery.py           # Auto-discovery page
+│   ├── status.py              # Status monitoring page
+│   └── settings.py            # Application settings page
+├── dialogs/
+│   ├── __init__.py
+│   ├── confirm_dialog.py      # Custom confirmation dialogs
+│   ├── server_dialog.py       # Add/Edit server dialog
+│   └── json_editor.py         # JSON configuration editor
+└── utils/
+    ├── __init__.py
+    ├── animations.py          # QPropertyAnimation utilities
+    ├── async_worker.py        # QThread workers for async ops
+    └── signals.py             # Custom Qt signals
+```
+
+### Component Implementation Guidelines
+
+#### 1. Main Window (`main_window.py`)
+- **Frameless Window**: Custom title bar with min/max/close buttons
+- **Window Controls**: Draggable title bar, resize grips
+- **Layout**: QSplitter with collapsible sidebar (250px) and content area
+- **System Tray**: Minimize to tray option with context menu
+- **Shortcuts**: 
+  - Ctrl+Q: Quit
+  - Ctrl+S: Add Server
+  - Ctrl+B: Backup
+  - F5: Refresh/Discovery
+
+#### 2. Sidebar Navigation (`widgets/sidebar.py`)
+- **Structure**: QListWidget with custom delegates
+- **Items**: Icon + Label, hover effects, active state
+- **Collapse**: Animated width change (250px ↔ 60px)
+- **Navigation Items**:
+  ```python
+  MENU_ITEMS = [
+      ("dashboard", "Dashboard", "home.svg"),
+      ("servers", "Servers", "server.svg"),
+      ("editors", "Editors", "edit.svg"),
+      ("backup", "Backup", "save.svg"),
+      ("discovery", "Discovery", "search.svg"),
+      ("status", "Status", "activity.svg"),
+      ("settings", "Settings", "settings.svg"),
+  ]
+  ```
+
+#### 3. Custom Widgets
+
+##### Circular Progress (`widgets/circular_progress.py`)
+- **Properties**: 
+  - value: 0-100
+  - color: QColor
+  - thickness: stroke width
+  - animated: bool
+- **Animation**: QPropertyAnimation for smooth transitions
+- **Text**: Percentage in center
+
+##### Toggle Switch (`widgets/toggle_switch.py`)
+- **States**: On/Off with animated slide
+- **Signals**: toggled(bool)
+- **Customization**: Colors, size, animation duration
+
+##### Data Table (`widgets/data_table.py`)
+- **Features**:
+  - Sortable columns
+  - Search/filter bar
+  - Context menu (Edit, Delete, Copy)
+  - Alternating row colors
+  - Selection highlighting
+
+#### 4. Pages Implementation
+
+##### Dashboard Page (`pages/dashboard.py`)
+- **Layout**: Grid of cards
+- **Widgets**:
+  - 3 circular progress indicators (servers, editors, backups)
+  - Quick actions grid (4 buttons)
+  - Recent activity list (last 10 operations)
+  - System status summary
+
+##### Server Management Page (`pages/servers.py`)
+- **Sections**:
+  - Add Server Form (name, config JSON, editor dropdown)
+  - Server List Table (name, command, editor, actions)
+  - Bulk Operations toolbar
+- **Validation**: Real-time JSON validation
+- **Actions**: Add, Edit, Delete, Test Connection
+
+##### Backup Page (`pages/backup.py`)
+- **Create Backup**:
+  - Editor selection checkboxes
+  - Description text field
+  - Create button with progress
+- **Restore Section**:
+  - Backup list with timestamps
+  - Preview dialog before restore
+  - Progress bar during restore
+
+##### Discovery Page (`pages/discovery.py`)
+- **Animation**: Radar-style scanning animation
+- **Progress**: Linear progress bar
+- **Results**: Card grid of found configurations
+- **Actions**: Import selected, Import all
+
+### Backend Integration
+
+#### Threading Model
+```python
+class AsyncWorker(QThread):
+    """Base class for async operations"""
+    progress = Signal(int)
+    result = Signal(object)
+    error = Signal(str)
+    
+    def __init__(self, manager: MCPManager, operation: str, **kwargs):
+        super().__init__()
+        self.manager = manager
+        self.operation = operation
+        self.kwargs = kwargs
+```
+
+#### Manager Integration
+- Import `MCPManager` from `mcpcommander.core.manager`
+- Use existing schemas from `mcpcommander.schemas`
+- Leverage error classes from `mcpcommander.utils.errors`
+- Maintain same validation logic
+
+### Launch Integration
+
+#### CLI Command
+```python
+# In cli/main.py
+@app.command()
+def gui(
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable debug logging"),
+) -> None:
+    """Launch the graphical user interface."""
+    try:
+        from mcpcommander.gui.app import launch_gui
+        launch_gui(verbose=verbose)
+    except ImportError:
+        print("GUI dependencies not installed. Install with: pip install mcp-commander[gui]")
+```
+
+### Testing Strategy
+
+#### Unit Tests
+- Test each custom widget independently
+- Mock backend calls
+- Verify signal/slot connections
+
+#### Integration Tests  
+- Test page-to-backend communication
+- Verify async operations
+- Test error handling
+
+#### UI Tests
+```python
+# tests/gui/test_main_window.py
+def test_sidebar_navigation(qtbot):
+    """Test sidebar page switching"""
+    window = MainWindow()
+    qtbot.addWidget(window)
+    
+    # Click servers item
+    qtbot.mouseClick(window.sidebar.items[1], Qt.LeftButton)
+    assert window.content_stack.currentIndex() == 1
+```
+
+### Installation & Dependencies
+
+#### Required Packages
+```toml
+[project.optional-dependencies]
+gui = [
+    "PySide6>=6.5.0",
+    "qasync>=0.27.0",  # Async Qt support
+    "Pillow>=10.0.0",  # Image processing
+]
+```
+
+#### Installation Command
+```bash
+# Install with GUI support
+pip install mcp-commander[gui]
+
+# Or for development
+pip install -e ".[gui,dev]"
+```
+
+### Development Guidelines
+
+#### Code Organization
+1. Each page inherits from `BasePage` class
+2. Custom widgets emit signals for actions
+3. Pages connect to signals and call backend
+4. Async operations use QThread workers
+5. All strings in constants for i18n readiness
+
+#### State Management
+- Application state in `MainWindow`
+- Page state local to each page
+- Settings persisted via QSettings
+- Backend state via MCPManager
+
+#### Error Handling
+```python
+def handle_operation(self):
+    try:
+        result = self.manager.operation()
+        self.show_success(f"Operation completed: {result}")
+    except MCPCommanderError as e:
+        self.show_error(f"Operation failed: {e}")
+    except Exception as e:
+        self.show_error(f"Unexpected error: {e}")
+        logger.exception("Unexpected error in operation")
+```
+
+### Performance Considerations
+
+#### Optimization Guidelines
+1. **Lazy Loading**: Load pages on first access
+2. **Virtual Lists**: Use QListView for large datasets
+3. **Debouncing**: Debounce search inputs (300ms)
+4. **Caching**: Cache discovery results for 5 minutes
+5. **Threading**: All I/O operations in QThread
+
+#### Memory Management
+- Properly parent all widgets
+- Disconnect signals when destroying widgets
+- Clear data models when switching pages
+- Use deleteLater() for dynamic widgets
+
+### Future Enhancements
+
+#### Planned Features
+1. **Themes**: Light theme option
+2. **Plugins**: Extension system for custom pages
+3. **Export**: Export configurations to file
+4. **Import**: Bulk import from file
+5. **Profiles**: Multiple configuration profiles
+6. **Hotkeys**: Global hotkeys for quick access
+7. **Update Check**: Auto-update notifications
+8. **Telemetry**: Optional usage analytics
+
+### Troubleshooting
+
+#### Common Issues
+1. **High DPI**: Set QT_SCALE_FACTOR environment variable
+2. **Font Issues**: Install system fonts package
+3. **Dark Theme**: Ensure OS dark mode is enabled
+4. **Performance**: Disable animations on older systems
+
+### Resources & Attribution
+
+#### PyOneDark Theme
+- Original by: Wanderson M. Pimenta
+- License: MIT
+- Repository: https://github.com/Wanderson-Magalhaes/PyOneDark_Qt_Widgets_Modern_GUI
+- Attribution: Must maintain copyright notice in theme files
+
+#### Icons
+- Material Design Icons (Apache 2.0)
+- Customize colors to match theme
+
+---
+*GUI Implementation added: 2025-01-20*
+*Based on PyOneDark theme with MIT license*
+- Please also observe the LICENSE for the PySide6 interface repository and use it while respecting the LICENSE requirements.
