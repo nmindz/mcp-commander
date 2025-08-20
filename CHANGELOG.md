@@ -7,6 +7,85 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2025-08-18 - MAJOR CLI RESTRUCTURE
+
+### ⚠️ BREAKING CHANGES
+
+This is a major version release with significant CLI interface changes. The following commands have been **removed** from the main CLI and moved under the `mcp config` subcommand:
+
+| **Removed Command** | **New Command** | **Migration** |
+|---------------------|-----------------|---------------|
+| `mcp list` | `mcp config servers` | Update scripts and workflows |
+| `mcp status` | `mcp config show` | Update scripts and workflows |
+| `mcp selfdestruct` | `mcp config reset` | Update scripts and workflows |
+
+**⚠️ These old commands are no longer available and will cause errors if used.**
+
+### Added
+- **🆕 `mcp config` Command Group**: New subcommand structure for configuration management
+  - `mcp config servers [EDITOR]`: List configured MCP servers (replaces `mcp list`)
+  - `mcp config show`: Show configuration status with enhanced formatting (replaces `mcp status`)
+  - `mcp config reset [--include-backups] [--force]`: Reset configuration to empty state (replaces `mcp selfdestruct`)
+  - `mcp config path`: **NEW** - Display absolute path to MCP Commander's configuration file
+  - `mcp config help`: Comprehensive help for all config subcommands
+- **Enhanced Help System**: Each config subcommand has detailed help with examples
+- **Improved Configuration Display**: Better status formatting with comprehensive editor overview
+- **Safer Reset Process**: Enhanced confirmation prompts and clearer warning messages
+
+### Changed
+- **CLI Organization**: Configuration management commands now logically grouped under `mcp config`
+- **Command Clarity**: Commands now clearly indicate they manage MCP Commander's own configuration (vs. MCP servers)
+- **Help Structure**: Following modern CLI patterns with nested help for better discoverability
+- **Status Display**: `mcp config show` provides richer information than old `mcp status`
+- **Version Status**: Now v1.0.0 - Production/Stable (upgraded from Beta)
+
+### Migration Guide
+
+**For Automation/Scripts:**
+```bash
+# OLD (will cause errors in v1.0.0+)
+mcp list
+mcp status  
+mcp selfdestruct
+
+# NEW (required in v1.0.0+)
+mcp config servers
+mcp config show
+mcp config reset
+```
+
+**For Interactive Use:**
+- Replace `mcp list` with `mcp config servers`
+- Replace `mcp status` with `mcp config show` 
+- Replace `mcp selfdestruct` with `mcp config reset`
+- Use new `mcp config path` to find configuration file location
+- Use `mcp config help` for comprehensive help
+
+### Technical Details
+- **Semantic Versioning**: Now following strict semantic versioning from v1.0.0
+- **CLI Framework**: Enhanced Typer command structure with organized subcommands
+- **Type Safety**: Complete type hints and mypy validation maintained
+- **Testing**: All new CLI commands covered by test suite
+- **Backward Compatibility**: None - this is a breaking change release
+
+### Examples
+```bash
+# New configuration management workflow
+mcp config path                    # Show config file location
+mcp config show                    # Show configuration status
+mcp config servers                 # List all servers
+mcp config servers claude-code     # List servers for specific editor
+mcp config reset                   # Reset with confirmation
+mcp config reset --force           # Reset without confirmation
+mcp config help                    # Show config help
+
+# Server management (unchanged)
+mcp add server myserver "command" --all
+mcp remove server myserver
+mcp backup create
+mcp discover
+```
+
 ## [0.1.3] - 2025-08-18
 
 ### Added
@@ -244,7 +323,8 @@ mcp remove my-server cursor
 mcp add --help --verbose
 ```
 
-[Unreleased]: https://github.com/nmindz/mcp-commander/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/nmindz/mcp-commander/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/nmindz/mcp-commander/compare/v0.1.3...v1.0.0
 [0.1.3]: https://github.com/nmindz/mcp-commander/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/nmindz/mcp-commander/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/nmindz/mcp-commander/compare/v0.1.0...v0.1.1

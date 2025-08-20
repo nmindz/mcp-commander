@@ -121,28 +121,28 @@ def ensure_user_config() -> Path:
         # Create OS-specific default configuration
         if sys.platform == "win32":
             config_paths = {
-                    "claude-code": "%USERPROFILE%\\.claude.json",
-                    "claude-desktop": "%APPDATA%\\Claude\\claude_desktop_config.json",
-                    "cursor": "%USERPROFILE%\\.cursor\\mcp.json",
-                    "vscode": "%APPDATA%\\Code\\User\\mcp.json",
-                    "windsurf": "%USERPROFILE%\\.codeium\\windsurf\\mcp_config.json"
-                }
+                "claude-code": "%USERPROFILE%\\.claude.json",
+                "claude-desktop": "%APPDATA%\\Claude\\claude_desktop_config.json",
+                "cursor": "%USERPROFILE%\\.cursor\\mcp.json",
+                "vscode": "%APPDATA%\\Code\\User\\mcp.json",
+                "windsurf": "%USERPROFILE%\\.codeium\\windsurf\\mcp_config.json",
+            }
         elif sys.platform == "darwin":  # macOS
             config_paths = {
-                    "claude-code": "~/.claude.json",
-                    "claude-desktop": "~/Library/Application Support/Claude/claude_desktop_config.json",
-                    "cursor": "~/.cursor/mcp.json",
-                    "vscode": "~/Library/Application Support/Code/User/mcp.json",
-                    "windsurf": "~/.codeium/windsurf/mcp_config.json"
-                }
+                "claude-code": "~/.claude.json",
+                "claude-desktop": "~/Library/Application Support/Claude/claude_desktop_config.json",
+                "cursor": "~/.cursor/mcp.json",
+                "vscode": "~/Library/Application Support/Code/User/mcp.json",
+                "windsurf": "~/.codeium/windsurf/mcp_config.json",
+            }
         else:  # Linux
             config_paths = {
-                    "claude-code": "~/.claude.json",
-                    "claude-desktop": "~/.config/Claude/claude_desktop_config.json",
-                    "cursor": "~/.cursor/mcp.json",
-                    "vscode": "~/.config/Code/User/mcp.json",
-                    "windsurf": "~/.codeium/windsurf/mcp_config.json"
-                }
+                "claude-code": "~/.claude.json",
+                "claude-desktop": "~/.config/Claude/claude_desktop_config.json",
+                "cursor": "~/.cursor/mcp.json",
+                "vscode": "~/.config/Code/User/mcp.json",
+                "windsurf": "~/.codeium/windsurf/mcp_config.json",
+            }
 
         default_config = f"""{{
   "editors": {{

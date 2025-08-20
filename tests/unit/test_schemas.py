@@ -148,6 +148,8 @@ class TestMCPCommanderConfig:
             config.get_editor_config("unknown-editor")
 
     def test_empty_editors_validation(self):
-        """Test empty editors validation."""
-        with pytest.raises(ValueError, match="At least one editor must be configured"):
-            MCPCommanderConfig(editors={})
+        """Test empty editors validation (now allowed for config reset)."""
+        # Empty editors is now allowed for config reset functionality
+        config = MCPCommanderConfig(editors={})
+        assert config.editors == {}
+        assert config.get_editor_names() == []

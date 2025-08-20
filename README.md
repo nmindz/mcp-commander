@@ -12,8 +12,12 @@
   [![Pytest](https://img.shields.io/badge/Pytest-8.4-red.svg)](https://pytest.org/)
   [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](#)
   [![Coverage](https://img.shields.io/badge/coverage-85%25-green.svg)](#)
-  [![CLI Commands](https://img.shields.io/badge/CLI%20Commands-13-blue.svg)](#-commands)
+  [![CLI Commands](https://img.shields.io/badge/CLI%20Commands-15-blue.svg)](#-commands)
   [![Type Checking](https://img.shields.io/badge/mypy-enabled-blue.svg)](https://mypy-lang.org/)
+
+</div>
+
+> **⚠️ BREAKING CHANGES in v1.0.0**: CLI commands have been restructured! See [Migration Guide](#-whats-new-in-v100---major-cli-restructure) below.
 
 </div>
 
@@ -87,7 +91,7 @@ python run.py list
 
 # Method C: Using Python module syntax (cleanest)
 PYTHONPATH="src:$PYTHONPATH" python -m mcpcommander --help
-PYTHONPATH="src:$PYTHONPATH" python -m mcpcommander status
+PYTHONPATH="src:$PYTHONPATH" python -m mcpcommander config show
 ```
 
 ### Requirements
@@ -97,15 +101,21 @@ PYTHONPATH="src:$PYTHONPATH" python -m mcpcommander status
 ## 💡 Getting Help
 
 ### Contextual Examples
-Use `--help --verbose` (or `--help -v`) to see practical examples for any command:
+Use `--help` to see detailed help with practical examples for any command:
 ```bash
-# Show detailed help with examples
-mcp add --help --verbose
-mcp add-editor --help --verbose
-mcp status --help --verbose
-
-# Regular help (without examples)
+# Show complete help with examples (default behavior)
 mcp add --help
+mcp add editor --help
+mcp config show --help
+
+# Alternative help syntax
+mcp add help
+mcp remove help
+mcp backup help
+
+# Enable debug output with verbose flag
+mcp add server myserver "command" --verbose
+mcp config servers --verbose
 ```
 
 ### Configuration Examples
@@ -115,7 +125,7 @@ View all transport configuration examples:
 mcp examples
 
 # Show examples with usage instructions
-mcp examples --verbose
+mcp examples
 ```
 
 ## 💻 Commands
@@ -126,37 +136,49 @@ mcp examples --verbose
 mcp discover
 
 # Check status of all editor configurations
-mcp status
+mcp config show
 
 # List available editors
 mcp editors
 ```
 
-### 💣 Configuration Reset
+### ⚙️ Configuration Management
 ```bash
+# Show configuration status and editor overview
+mcp config show
+
+# List all configured MCP servers
+mcp config servers
+
+# List servers for specific editor
+mcp config servers claude-code
+
+# Show absolute path to configuration file
+mcp config path
+
 # Reset configuration to empty state (with confirmation)
-mcp selfdestruct
+mcp config reset
 
 # Reset configuration and remove all backups
-mcp selfdestruct --include-backups
+mcp config reset --include-backups
 
 # Reset without confirmation prompts
-mcp selfdestruct --force
+mcp config reset --force
 ```
 
 ### 📝 Server Management
 ```bash
-# List all configured servers
-mcp list
-
-# List servers for a specific editor
-mcp list claude-code
-
 # Add server to specific editor
-mcp add myserver "npx @modelcontextprotocol/server-filesystem /tmp" claude-code
+mcp add server myserver "npx @modelcontextprotocol/server-filesystem /tmp" claude-code
 
-# Add server to all configured editors
-mcp add myserver "npx @modelcontextprotocol/server-filesystem /tmp"
+# Add server to all discovered editors (replaces add-all)
+mcp add server myserver "npx @modelcontextprotocol/server-filesystem /tmp" --all
+
+# Remove server from editors
+mcp remove server myserver
+
+# Remove server from specific editor  
+mcp remove server myserver claude-code
 ```
 
 ### 🌍 Environment Variable Support
@@ -164,20 +186,63 @@ mcp add myserver "npx @modelcontextprotocol/server-filesystem /tmp"
 # Copy environment variables from current environment
 export MCP_LOG_LEVEL=info
 export GIT_SIGN_COMMITS=false
-mcp add git-server "npx @cyanheads/git-mcp-server" --from-env=MCP_LOG_LEVEL,GIT_SIGN_COMMITS
+mcp add server git-server "npx @cyanheads/git-mcp-server" --from-env=MCP_LOG_LEVEL,GIT_SIGN_COMMITS
 
 # Set explicit environment variables
-mcp add api-server "npx my-api-server" --env=DEBUG:true --env=API_KEY:secret123
+mcp add server api-server "npx my-api-server" --env=DEBUG:true --env=API_KEY:secret123
 
 # Combine both approaches
-mcp add hybrid-server "npx server" --from-env=LOG_LEVEL --env=CUSTOM_VAR:custom_value
+mcp add server hybrid-server "npx server" --from-env=LOG_LEVEL --env=CUSTOM_VAR:custom_value
 
 # Use with JSON configuration (merges environment variables)
-mcp add json-server '{"command": "npx", "args": ["server"], "env": {"EXISTING": "value"}}' --env=NEW_VAR:added
+mcp add server json-server '{"command": "npx", "args": ["server"], "env": {"EXISTING": "value"}}' --env=NEW_VAR:added
 
 # Global verbose mode via environment variable
 export MCP_COMMANDER_VERBOSE=1
-mcp list  # Will run in verbose mode automatically
+mcp config servers  # Will run in verbose mode automatically
+```
+
+### 🎛️ Editor Management
+```bash
+# Add support for custom editor
+mcp add editor my-editor "/path/to/config.json"
+
+# Add editor with custom JSONPath
+mcp add editor my-editor "/path/to/config.json" --jsonpath="servers"
+
+# Remove editor support
+mcp remove editor my-editor
+
+# List available editors
+mcp editors
+```
+
+### 💾 Backup Management
+```bash
+# Create backup of all configurations
+mcp backup create
+
+# Create backup of specific editor
+mcp backup create claude-code --description "Before update"
+
+# List all backups
+mcp backup list
+
+# List backups for specific editor
+mcp backup list claude-code
+
+# Restore backup (interactive selection)
+mcp backup restore
+
+# Restore specific backup
+mcp backup restore backup-id-123
+
+# Delete backup (interactive selection)
+mcp backup delete
+
+# Configure backup settings
+mcp backup config --max-backups 20
+mcp backup config --show
 ```
 
 #### Generated Configuration
@@ -200,19 +265,27 @@ When using environment variables, MCP Commander generates server configurations 
 ### 🌍 NEW: Add to All Discovered Configurations
 ```bash
 # Automatically discover and install to ALL MCP configurations
-mcp add-all myserver "npx @modelcontextprotocol/server-filesystem /tmp"
+mcp add server myserver "npx @modelcontextprotocol/server-filesystem /tmp" --all
 
 # Works with JSON configurations too
-mcp add-all myserver '{"command": "npx", "args": ["-y", "@modelcontextprotocol/server-memory"]}'
+mcp add server myserver '{"command": "npx", "args": ["-y", "@modelcontextprotocol/server-memory"]}' --all
+
+# Get help for add commands
+mcp add help
+mcp add server help
 ```
 
 ### 🗑️ Server Removal
 ```bash
 # Remove server from all configured editors
-mcp remove myserver
+mcp remove server myserver
 
 # Remove server from specific editor
-mcp remove myserver cursor
+mcp remove server myserver cursor
+
+# Get help for remove commands
+mcp remove help
+mcp remove server help
 ```
 
 ### ℹ️ Help and Version
@@ -292,22 +365,22 @@ mcpCommander/
 
 ```bash
 # Add JIRA server to all editors
-mcp add jira-mcp "~/Projects/me/jira-mcp/server.py"
+mcp add server jira-mcp "~/Projects/me/jira-mcp/server.py" --all
 
 # List all configured servers
-mcp list
+mcp config servers
 
 # Remove from just Cursor
-mcp remove jira-mcp cursor
+mcp remove server jira-mcp cursor
 
 # Check what's configured
-mcp status
+mcp config show
 ```
 
 ### Adding a server with complex configuration
 
 ```bash
-mcp add filesystem '{"command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem", "~/Documents"]}'
+mcp add server filesystem '{"command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem", "~/Documents"]}'
 ```
 
 ## 🛠️ Development
@@ -355,49 +428,72 @@ mcp-commander/
 - Cross-platform (macOS, Windows, Linux)
 - Rich CLI output with colorized formatting
 
-## 🆕 What's New in v0.1.3
+## 🚀 What's New in v1.0.0 - Major CLI Restructure
 
-### 🪟 **Enhanced Windows Support**
-- **Fixed Path Resolution**: Complete fix for Windows path detection
-  - No more hardcoded Unix paths like `~/Library/Application Support`
-  - Proper Windows environment variables (`%USERPROFILE%`, `%APPDATA%`)
-  - All editors now work correctly on Windows
+### 🔄 **BREAKING CHANGES - CLI Restructure**
+**MCP Commander v1.0.0 introduces a major CLI restructuring for better organization and usability.**
 
-### 💣 **Configuration Reset**
-- **New `selfdestruct` Command**: Reset MCP Commander to clean state
-  - `mcp selfdestruct`: Reset configuration with confirmation
-  - `mcp selfdestruct --include-backups`: Also remove all backups
-  - `mcp selfdestruct --force`: Skip confirmation prompts
-  - Perfect for testing autodiscovery functionality
+#### **🆕 New `mcp config` Command Group**
+All MCP Commander configuration management is now under the `mcp config` subcommand:
 
-### 🎯 **Enhanced Discovery Workflow**
-- **Active Configuration Population**: `mcp discover` now updates your config
-  - Previously was read-only, now actively populates configuration
-  - Complete workflow: `selfdestruct` → `discover` → `status`
-  - No more empty config files after discovery
+| **OLD Command** | **NEW Command** | **Description** |
+|-----------------|-----------------|-----------------|
+| `mcp list` | `mcp config servers` | List configured MCP servers |
+| `mcp status` | `mcp config show` | Show configuration status |  
+| `mcp selfdestruct` | `mcp config reset` | Reset configuration to empty state |
+| *(new)* | `mcp config path` | Show configuration file path |
 
-### 🚀 **New Editor Support**
-- **Windsurf IDE**: Full support for Codeium's Windsurf editor
-  - Cross-platform path detection and configuration
-  - Automatic discovery and management
+#### **✨ What's Improved**
+- **Better Organization**: Configuration commands logically grouped under `mcp config`
+- **Clearer Intent**: Commands clearly indicate they manage MCP Commander's own configuration
+- **Enhanced Help**: Each subcommand group has comprehensive help and examples
+- **Consistent Structure**: Follows modern CLI patterns for better discoverability
 
-## 🔄 Migration from Previous Versions
+#### **🔄 Migration Path**
+**All old commands still work in this version but will be removed in v1.1.0:**
+
+```bash
+# OLD (still works but deprecated)
+mcp list                    # ⚠️ Will be removed in v1.1.0
+mcp status                  # ⚠️ Will be removed in v1.1.0  
+mcp selfdestruct            # ⚠️ Will be removed in v1.1.0
+
+# NEW (recommended - use these now!)
+mcp config servers          # ✅ List servers
+mcp config show             # ✅ Show status
+mcp config reset            # ✅ Reset configuration
+mcp config path             # ✅ Show config path (new!)
+```
+
+### 🎯 **Enhanced Configuration Management**
+- **New `mcp config path`**: Shows absolute path to configuration file
+- **Improved `mcp config show`**: Better status formatting with comprehensive editor overview
+- **Enhanced `mcp config reset`**: Safer reset process with clear confirmations
+- **Better Help System**: Each config subcommand has detailed help with examples
+
+### 📦 **Production Ready - v1.0.0**
+- **Stable API**: CLI interface is now stable and production-ready  
+- **Semantic Versioning**: Following strict semantic versioning from v1.0.0
+- **Comprehensive Testing**: Full test coverage for all CLI commands
+- **Type Safety**: Complete type hints and mypy validation
+
+## 🔄 Previous Version Features (Still Available)
 
 ### 🔍 **Auto-Discovery System**
-- Automatically finds all MCP configurations on your system
+- Automatically finds all MCP configurations on your system  
 - Supports Claude Code, Claude Desktop, Cursor, VS Code, Windsurf, and more
 - Cross-platform detection (macOS, Windows, Linux)
 
 ### 🌍 **Add-All Command**
 ```bash
 # One command to rule them all!
-mcp add-all my-server "npx @modelcontextprotocol/server-filesystem /tmp"
+mcp add server my-server "npx @modelcontextprotocol/server-filesystem /tmp" --all
 ```
 - Discovers ALL MCP configurations automatically
 - Installs server to every found configuration
 - Detailed success/failure reporting with colors
 
-### 📊 **Enhanced CLI Experience**
+### 📊 **Enhanced CLI Experience**  
 - Rich table formatting for server listings
 - Colorized status indicators (✅❌⚠️)
 - Comprehensive error messages with actionable guidance
@@ -414,19 +510,21 @@ mcp add-all my-server "npx @modelcontextprotocol/server-filesystem /tmp"
 ### Common Issues
 - **Configuration not found**: Run `mcp discover` to see all available MCP configurations
 - **Permission errors**: Ensure you have write access to editor configuration directories
-- **JSON validation errors**: Use `mcp status` to check configuration file integrity
-- **Server conflicts**: Use `mcp list` to see existing servers before adding new ones
+- **JSON validation errors**: Use `mcp config show` to check configuration file integrity
+- **Server conflicts**: Use `mcp config servers` to see existing servers before adding new ones
 
 ### Debug Mode
 ```bash
-# Enable verbose output for debugging
-mcp add-all myserver "command" --verbose
-mcp list --verbose
+# Enable debug output with verbose flag
+mcp add server myserver "command" --all --verbose
+mcp config servers --verbose
 ```
 
 ### Getting Help
 ```bash
 # Comprehensive help for any command
 mcp --help
-mcp add-all --help
+mcp add --help
+mcp add server --help
+mcp backup --help
 ```

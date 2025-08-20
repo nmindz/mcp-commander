@@ -103,10 +103,12 @@ class TestConfigManagerErrors:
             _ = manager.config
 
     def test_empty_editors_section(self, tmp_path):
-        """Test handling empty editors section."""
+        """Test handling empty editors section (now allowed for config reset)."""
         config_file = tmp_path / "empty_editors.json"
         config_file.write_text('{"editors": {}}')
 
         manager = ConfigManager(config_file)
-        with pytest.raises(ConfigurationError, match="validation failed"):
-            _ = manager.config
+        # Empty editors is now allowed for config reset functionality
+        config = manager.config
+        assert config is not None
+        assert config.editors == {}

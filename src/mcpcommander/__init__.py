@@ -1,6 +1,6 @@
 """MCP Commander - Cross-platform MCP server management tool."""
 
-__version__ = "0.1.3"
+__version__ = "1.0.0"
 __author__ = "Evandro Camargo"
 __license__ = "Apache-2.0"
 __description__ = "A command-line tool to manage MCP servers across different code editors"

@@ -12,42 +12,45 @@ def get_command_examples() -> dict[str, list[str]]:
     """Get examples for each CLI command."""
     return {
         "add": [
-            'mcp add my-server "npx @modelcontextprotocol/server-filesystem /Users/user"',
-            'mcp add api-server \'{"transport": {"type": "http", "host": "localhost", "port": 3000}}\' claude-code',
-            'mcp add ws-server "ws://localhost:8080/mcp" vscode',
-            'mcp add brave-search "npx -y @modelcontextprotocol/server-brave-search" --config custom.json',
-        ],
-        "add-all": [
-            'mcp add-all global-server "npx @modelcontextprotocol/server-filesystem /tmp"',
-            'mcp add-all api-gateway \'{"transport": {"type": "http", "host": "api.example.com", "port": 443}}\'',
-            'mcp add-all realtime-ws "ws://realtime.example.com/mcp"',
+            'mcp add server my-server "npx @modelcontextprotocol/server-filesystem /Users/user"',
+            'mcp add server api-server \'{"transport": {"type": "http", "host": "localhost", "port": 3000}}\' claude-code',
+            'mcp add server ws-server "ws://localhost:8080/mcp" vscode',
+            'mcp add server brave-search "npx -y @modelcontextprotocol/server-brave-search" --config custom.json',
+            'mcp add server global-server "npx @modelcontextprotocol/server-filesystem /tmp" --all',
+            'mcp add editor windsurf "~/.codeium/windsurf/mcp_config.json" --jsonpath mcpServers',
         ],
         "remove": [
-            "mcp remove my-server",
-            "mcp remove old-server claude-code",
-            "mcp remove test-api vscode",
+            "mcp remove server my-server",
+            "mcp remove server old-server claude-code",
+            "mcp remove server test-api vscode",
+            "mcp remove editor windsurf",
         ],
-        "list": ["mcp list", "mcp list claude-code", "mcp list vscode --verbose"],
-        "status": ["mcp status", "mcp status --config custom.json", "mcp status --verbose"],
         "discover": ["mcp discover", "mcp discover --verbose"],
         "editors": ["mcp editors", "mcp editors --config custom.json"],
-        "add-editor": [
-            'mcp add-editor windsurf "~/.codeium/windsurf/mcp_config.json" --jsonpath mcpServers',
-            'mcp add-editor sublime "~/Library/Application Support/Sublime Text/mcp.json" -j servers',
-            'mcp add-editor custom-ide "/path/to/config.json"',
+        "backup": [
+            "mcp backup create",
+            "mcp backup create claude-code --description 'Before update'",
+            "mcp backup list",
+            "mcp backup restore",
+            "mcp backup delete",
+            "mcp backup config --max-backups 20",
         ],
-        "remove-editor": [
-            "mcp remove-editor windsurf",
-            "mcp remove-editor old-editor --config custom.json",
+        "config": [
+            "mcp config servers",
+            "mcp config servers claude-code",
+            "mcp config show",
+            "mcp config path",
+            "mcp config reset",
+            "mcp config reset --include-backups",
         ],
-        "examples": ["mcp examples", "mcp examples --verbose"],
+        "examples": ["mcp examples"],
         "version": ["mcp version"],
     }
 
 
 def should_show_examples() -> bool:
     """Check if we should show examples based on command line args."""
-    return "--help" in sys.argv and ("--verbose" in sys.argv or "-v" in sys.argv)
+    return "--help" in sys.argv
 
 
 def print_command_examples(command_name: str) -> None:

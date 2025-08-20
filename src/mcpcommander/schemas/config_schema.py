@@ -183,12 +183,16 @@ class MCPCommanderConfig(BaseModel):
 
 class BackupInfo(BaseModel):
     """Schema for backup information."""
-    
+
     backup_id: str = Field(..., description="Unique backup identifier")
     timestamp: datetime = Field(..., description="Backup creation timestamp")
-    editor_name: str | None = Field(None, description="Specific editor name if single-editor backup")
+    editor_name: str | None = Field(
+        None, description="Specific editor name if single-editor backup"
+    )
     description: str = Field(..., description="Backup description")
-    files_backed_up: list[str] = Field(default_factory=list, description="List of editor names backed up")
+    files_backed_up: list[str] = Field(
+        default_factory=list, description="List of editor names backed up"
+    )
 
     @field_validator("backup_id")
     def validate_backup_id(cls, v: str) -> str:
@@ -217,9 +221,11 @@ class BackupInfo(BaseModel):
 
 class BackupConfig(BaseModel):
     """Schema for backup configuration."""
-    
+
     max_backups: int = Field(10, description="Maximum number of backups to keep", ge=1)
-    backups: list[BackupInfo] = Field(default_factory=list, description="List of backup information")
+    backups: list[BackupInfo] = Field(
+        default_factory=list, description="List of backup information"
+    )
 
     @field_validator("max_backups")
     def validate_max_backups(cls, v: int) -> int:

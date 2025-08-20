@@ -61,7 +61,7 @@ class MCPDiscovery:
         else:
             # macOS/Linux: Use home directory
             claude_config = self.home / ".claude.json"
-        
+
         if claude_config.exists():
             return EditorConfig(config_path=str(claude_config), jsonpath="mcpServers")
         return None
@@ -84,9 +84,17 @@ class MCPDiscovery:
                 # Fallback using USERPROFILE
                 user_profile = os.environ.get("USERPROFILE")
                 if user_profile:
-                    config_path = Path(user_profile) / "AppData" / "Roaming" / "Claude" / "claude_desktop_config.json"
+                    config_path = (
+                        Path(user_profile)
+                        / "AppData"
+                        / "Roaming"
+                        / "Claude"
+                        / "claude_desktop_config.json"
+                    )
                 else:
-                    config_path = self.home / "AppData" / "Roaming" / "Claude" / "claude_desktop_config.json"
+                    config_path = (
+                        self.home / "AppData" / "Roaming" / "Claude" / "claude_desktop_config.json"
+                    )
         else:  # Linux
             config_path = self.home / ".config" / "Claude" / "claude_desktop_config.json"
 
@@ -105,27 +113,39 @@ class MCPDiscovery:
                 primary_path = self.home / ".cursor" / "mcp.json"
         else:
             primary_path = self.home / ".cursor" / "mcp.json"
-        
+
         # Alternative paths for different installation types
         alt_paths = []
-        
+
         if self.system == "darwin":  # macOS
-            alt_paths.extend([
-                self.home / "Library" / "Application Support" / "Cursor" / "User" / "globalStorage" / "mcp.json",
-                self.home / ".cursor" / "config.json",
-            ])
+            alt_paths.extend(
+                [
+                    self.home
+                    / "Library"
+                    / "Application Support"
+                    / "Cursor"
+                    / "User"
+                    / "globalStorage"
+                    / "mcp.json",
+                    self.home / ".cursor" / "config.json",
+                ]
+            )
         elif self.system == "windows":
             appdata = os.environ.get("APPDATA")
             if appdata:
                 alt_paths.append(Path(appdata) / "Cursor" / "User" / "globalStorage" / "mcp.json")
-            alt_paths.extend([
-                primary_path.parent / "config.json",
-            ])
+            alt_paths.extend(
+                [
+                    primary_path.parent / "config.json",
+                ]
+            )
         else:  # Linux
-            alt_paths.extend([
-                self.home / ".config" / "Cursor" / "User" / "globalStorage" / "mcp.json",
-                self.home / ".cursor" / "config.json",
-            ])
+            alt_paths.extend(
+                [
+                    self.home / ".config" / "Cursor" / "User" / "globalStorage" / "mcp.json",
+                    self.home / ".cursor" / "config.json",
+                ]
+            )
 
         for path in [primary_path] + alt_paths:
             if path.exists():
@@ -135,11 +155,22 @@ class MCPDiscovery:
     def _discover_vscode(self) -> EditorConfig | None:
         """Discover VS Code configuration."""
         paths_to_try = []
-        
+
         if self.system == "darwin":  # macOS
             paths_to_try = [
-                (self.home / "Library" / "Application Support" / "Code" / "User" / "mcp.json", "servers"),
-                (self.home / "Library" / "Application Support" / "Code" / "User" / "settings.json", "mcp.servers"),
+                (
+                    self.home / "Library" / "Application Support" / "Code" / "User" / "mcp.json",
+                    "servers",
+                ),
+                (
+                    self.home
+                    / "Library"
+                    / "Application Support"
+                    / "Code"
+                    / "User"
+                    / "settings.json",
+                    "mcp.servers",
+                ),
             ]
         elif self.system == "windows":
             appdata = os.environ.get("APPDATA")
@@ -151,7 +182,7 @@ class MCPDiscovery:
                     base_path = Path(user_profile) / "AppData" / "Roaming" / "Code" / "User"
                 else:
                     base_path = self.home / "AppData" / "Roaming" / "Code" / "User"
-            
+
             paths_to_try = [
                 (base_path / "mcp.json", "servers"),
                 (base_path / "settings.json", "mcp.servers"),
@@ -161,7 +192,7 @@ class MCPDiscovery:
                 (self.home / ".config" / "Code" / "User" / "mcp.json", "servers"),
                 (self.home / ".config" / "Code" / "User" / "settings.json", "mcp.servers"),
             ]
-        
+
         # Also check global user MCP config
         if self.system == "windows":
             user_profile = os.environ.get("USERPROFILE")
@@ -187,7 +218,7 @@ class MCPDiscovery:
         else:
             # macOS and Linux use the same path
             windsurf_config = self.home / ".codeium" / "windsurf" / "mcp_config.json"
-        
+
         if windsurf_config.exists():
             return EditorConfig(config_path=str(windsurf_config), jsonpath="mcpServers")
         return None
@@ -202,7 +233,7 @@ class MCPDiscovery:
                 cli_config = self.home / ".clauderc.json"
         else:
             cli_config = self.home / ".clauderc.json"
-        
+
         if cli_config.exists():
             return EditorConfig(config_path=str(cli_config), jsonpath="mcpServers")
         return None
@@ -228,7 +259,7 @@ class MCPDiscovery:
             print(f"{color}   {status} {name.upper():<15} {config.config_path}{Style.RESET_ALL}")
 
         print(
-            f"\n{Fore.CYAN}💡 Use 'mcp add-all <server_name> <config>' to install to all discovered configurations{Style.RESET_ALL}"
+            f"\n{Fore.CYAN}💡 Use 'mcp add server <server_name> <config> --all' to install to all discovered configurations{Style.RESET_ALL}"
         )
 
 

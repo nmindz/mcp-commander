@@ -1,4 +1,4 @@
-"""Modern CLI interface using typer."""
+"""Modern CLI interface using typer with organized subcommands."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from rich.table import Table
 
 from mcpcommander import __version__
 from mcpcommander.core.manager import MCPManager
-from mcpcommander.utils.cli_examples import print_command_examples, should_show_examples
+from mcpcommander.utils.cli_examples import print_command_examples
 from mcpcommander.utils.errors import MCPCommanderError
 from mcpcommander.utils.interactive import confirm_action, get_backup_description, select_backup
 from mcpcommander.utils.logger import configure_debug_logging, get_logger
@@ -53,7 +53,19 @@ def get_unicode_chars() -> dict[str, str]:
 
 UNICODE_CHARS = get_unicode_chars()
 
+# Main app
 app = typer.Typer(help="MCP Commander - Cross-platform MCP server management", add_completion=False)
+
+# Subcommand groups
+add_app = typer.Typer(help="Add MCP servers and editors")
+remove_app = typer.Typer(help="Remove MCP servers and editors")
+backup_app = typer.Typer(help="Backup management for MCP configurations")
+config_app = typer.Typer(help="Manage MCP Commander configuration")
+
+app.add_typer(add_app, name="add")
+app.add_typer(remove_app, name="remove")
+app.add_typer(backup_app, name="backup")
+app.add_typer(config_app, name="config")
 
 
 # Check for environment variable verbose setting
@@ -120,7 +132,7 @@ def _process_environment_options(
 
 
 def help_callback(ctx: typer.Context, param: typer.CallbackParam, value: bool) -> None:
-    """Custom help callback that shows examples when verbose is used."""
+    """Custom help callback that always shows complete help with examples."""
     if not value:
         return
 
@@ -130,19 +142,27 @@ def help_callback(ctx: typer.Context, param: typer.CallbackParam, value: bool) -
     # Show default help
     print(ctx.get_help())
 
-    # Show examples if --verbose is also provided
-    if should_show_examples() and command_name:
+    # Always show examples for help (no longer dependent on verbose flag)
+    if command_name:
         print_command_examples(command_name)
 
     raise typer.Exit()
 
 
-@app.command()
-def add(
+# =============================================================================
+# ADD COMMANDS
+# =============================================================================
+
+
+@add_app.command("server")
+def add_server(
     server_name: str = typer.Argument(..., help="Name of the server"),
     server_config: str = typer.Argument(..., help="Server configuration (JSON or command path)"),
     editor: str | None = typer.Argument(None, help="Specific editor to add server to"),
     config: Path | None = typer.Option(None, "--config", "-c", help="Configuration file path"),
+    all_editors: bool = typer.Option(
+        False, "--all", help="Add to ALL discovered MCP configurations on the system"
+    ),
     from_env: str | None = typer.Option(
         None,
         "--from-env",
@@ -151,7 +171,7 @@ def add(
     env: builtins.list[str] = typer.Option(
         [], "--env", help="Environment variable in KEY:value format (can be used multiple times)"
     ),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable debug logging"),
     help: bool = typer.Option(
         False,
         "--help",
@@ -170,327 +190,37 @@ def add(
         env_vars = _process_environment_options(from_env, env)
 
         manager = MCPManager(config)
-        result = manager.add_server(server_name, server_config, editor, env_vars)
 
-        if not result["failed"]:
-            # All successful
-            target = editor or "all configured editors"
-            print(
-                f"{Fore.GREEN}✅ Successfully added server '{server_name}' to {target}{Style.RESET_ALL}"
-            )
-        else:
-            # Some failures - details already printed by manager
-            raise typer.Exit(1)
+        if all_editors:
+            result = manager.add_server_to_all_discovered(server_name, server_config, env_vars)
 
-    except MCPCommanderError as e:
-        print(f"{Fore.RED}❌ Error: {e}{Style.RESET_ALL}")
-        if e.details:
-            print(f"{Fore.YELLOW}   Details: {e.details}{Style.RESET_ALL}")
-        raise typer.Exit(1) from None
-    except Exception as e:
-        print(f"{Fore.RED}❌ Unexpected error: {e}{Style.RESET_ALL}")
-        if verbose or VERBOSE_MODE:
-            logger.exception("Unexpected error in add command")
-        raise typer.Exit(1) from e
+            if result["discovered_count"] == 0:
+                print(
+                    f"\n{Fore.YELLOW}💡 Tip: Install Claude Desktop or Claude Code CLI to get started with MCP{Style.RESET_ALL}"
+                )
+                raise typer.Exit(0)
 
-
-@app.command("add-all")
-def add_all(
-    server_name: str = typer.Argument(..., help="Name of the server"),
-    server_config: str = typer.Argument(..., help="Server configuration (JSON or command path)"),
-    from_env: str | None = typer.Option(
-        None,
-        "--from-env",
-        help="Comma-separated environment variable names to copy from current environment",
-    ),
-    env: builtins.list[str] = typer.Option(
-        [], "--env", help="Environment variable in KEY:value format (can be used multiple times)"
-    ),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
-    help: bool = typer.Option(
-        False,
-        "--help",
-        callback=help_callback,
-        expose_value=False,
-        is_eager=True,
-        help="Show this message and exit.",
-    ),
-) -> None:
-    """Add MCP server to ALL discovered MCP configurations on the system."""
-    if verbose or VERBOSE_MODE:
-        configure_debug_logging()
-
-    try:
-        # Process environment variable options
-        env_vars = _process_environment_options(from_env, env)
-
-        manager = MCPManager()
-        result = manager.add_server_to_all_discovered(server_name, server_config, env_vars)
-
-        if result["discovered_count"] == 0:
-            print(
-                f"\n{Fore.YELLOW}💡 Tip: Install Claude Desktop or Claude Code CLI to get started with MCP{Style.RESET_ALL}"
-            )
-            raise typer.Exit(0)
-
-        if not result["failed"]:
-            # All successful
-            print(
-                f"\n{Fore.GREEN}🎉 Successfully added '{server_name}' to all {result['discovered_count']} MCP configuration(s)!{Style.RESET_ALL}"
-            )
-        elif result["successful"]:
-            # Partial success
-            print(
-                f"\n{Fore.YELLOW}⚠️  Added '{server_name}' to {len(result['successful'])}/{result['discovered_count']} configuration(s){Style.RESET_ALL}"
-            )
-            raise typer.Exit(1)
-        else:
-            # All failed
-            raise typer.Exit(1)
-
-    except MCPCommanderError as e:
-        print(f"{Fore.RED}❌ Error: {e}{Style.RESET_ALL}")
-        if e.details:
-            print(f"{Fore.YELLOW}   Details: {e.details}{Style.RESET_ALL}")
-        raise typer.Exit(1) from None
-    except Exception as e:
-        print(f"{Fore.RED}❌ Unexpected error: {e}{Style.RESET_ALL}")
-        if verbose or VERBOSE_MODE:
-            logger.exception("Unexpected error in add-all command")
-        raise typer.Exit(1) from e
-
-
-@app.command()
-def remove(
-    server_name: str = typer.Argument(..., help="Name of the server to remove"),
-    editor: str | None = typer.Argument(None, help="Specific editor to remove server from"),
-    config: Path | None = typer.Option(None, "--config", "-c", help="Configuration file path"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
-    help: bool = typer.Option(
-        False,
-        "--help",
-        callback=help_callback,
-        expose_value=False,
-        is_eager=True,
-        help="Show this message and exit.",
-    ),
-) -> None:
-    """Remove MCP server from editors."""
-    if verbose or VERBOSE_MODE:
-        configure_debug_logging()
-
-    try:
-        manager = MCPManager(config)
-        result = manager.remove_server(server_name, editor)
-
-        if not result["failed"]:
-            # All successful
-            target = editor or "all configured editors"
-            print(
-                f"{Fore.GREEN}✅ Successfully removed server '{server_name}' from {target}{Style.RESET_ALL}"
-            )
-        else:
-            # Some failures - details already printed by manager
-            raise typer.Exit(1)
-
-    except MCPCommanderError as e:
-        print(f"{Fore.RED}❌ Error: {e}{Style.RESET_ALL}")
-        if e.details:
-            print(f"{Fore.YELLOW}   Details: {e.details}{Style.RESET_ALL}")
-        raise typer.Exit(1) from None
-    except Exception as e:
-        print(f"{Fore.RED}❌ Unexpected error: {e}{Style.RESET_ALL}")
-        if verbose or VERBOSE_MODE:
-            logger.exception("Unexpected error in remove command")
-        raise typer.Exit(1) from e
-
-
-@app.command()
-def list(
-    editor: str | None = typer.Argument(None, help="Specific editor to list servers for"),
-    config: Path | None = typer.Option(None, "--config", "-c", help="Configuration file path"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
-    help: bool = typer.Option(
-        False,
-        "--help",
-        callback=help_callback,
-        expose_value=False,
-        is_eager=True,
-        help="Show this message and exit.",
-    ),
-) -> None:
-    """List configured MCP servers."""
-    if verbose or VERBOSE_MODE:
-        configure_debug_logging()
-
-    try:
-        manager = MCPManager(config)
-        servers = manager.list_servers(editor)
-
-        if not any(servers.values()):
-            if editor:
-                print(f"{Fore.YELLOW}No servers configured for {editor}{Style.RESET_ALL}")
+            if not result["failed"]:
+                print(
+                    f"\n{Fore.GREEN}🎉 Successfully added '{server_name}' to all {result['discovered_count']} MCP configuration(s)!{Style.RESET_ALL}"
+                )
+            elif result["successful"]:
+                print(
+                    f"\n{Fore.YELLOW}⚠️  Added '{server_name}' to {len(result['successful'])}/{result['discovered_count']} configuration(s){Style.RESET_ALL}"
+                )
+                raise typer.Exit(1)
             else:
-                print(f"{Fore.YELLOW}No servers configured{Style.RESET_ALL}")
-            return
-
-        # Create rich table
-        table = Table(title="Configured MCP Servers", box=box.ROUNDED)
-        table.add_column("Editor", style="cyan", no_wrap=True)
-        table.add_column("Server Name", style="magenta")
-        table.add_column("Transport", style="yellow", no_wrap=True)
-        table.add_column("Command/URL", style="green")
-        table.add_column("Details", style="blue")
-
-        for editor_name, editor_servers in servers.items():
-            if not editor_servers:
-                table.add_row(editor_name.upper(), "[dim]No servers[/dim]", "", "", "")
-                continue
-
-            for i, (server_name, server_config) in enumerate(editor_servers.items()):
-                editor_display = editor_name.upper() if i == 0 else ""
-
-                # Determine transport type and display info
-                if "transport" in server_config:
-                    transport_info = server_config["transport"]
-                    transport_type = transport_info.get("type", "unknown").upper()
-
-                    if transport_type == "HTTP":
-                        command_url = f"http://{transport_info.get('host')}:{transport_info.get('port')}{transport_info.get('path', '/mcp')}"
-                        details = f"Host: {transport_info.get('host')}"
-                    elif transport_type == "WEBSOCKET":
-                        command_url = transport_info.get("url", "")
-                        details = "Headers" if transport_info.get("headers") else ""
-                    elif transport_type == "SSE":
-                        command_url = transport_info.get("url", "")
-                        details = "Headers" if transport_info.get("headers") else ""
-                    else:
-                        command_url = str(transport_info)
-                        details = ""
-                else:
-                    # Legacy STDIO format
-                    transport_type = "STDIO"
-                    command_url = server_config.get("command", "")
-                    args = server_config.get("args", [])
-                    details = " ".join(args) if args else ""
-
-                table.add_row(editor_display, server_name, transport_type, command_url, details)
-
-        console.print(table)
-
-    except MCPCommanderError as e:
-        print(f"{Fore.RED}❌ Error: {e}{Style.RESET_ALL}")
-        if e.details:
-            print(f"{Fore.YELLOW}   Details: {e.details}{Style.RESET_ALL}")
-        raise typer.Exit(1) from None
-    except Exception as e:
-        print(f"{Fore.RED}❌ Unexpected error: {e}{Style.RESET_ALL}")
-        if verbose or VERBOSE_MODE:
-            logger.exception("Unexpected error in list command")
-        raise typer.Exit(1) from e
-
-
-@app.command()
-def status(
-    config: Path | None = typer.Option(None, "--config", "-c", help="Configuration file path"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
-    help: bool = typer.Option(
-        False,
-        "--help",
-        callback=help_callback,
-        expose_value=False,
-        is_eager=True,
-        help="Show this message and exit.",
-    ),
-) -> None:
-    """Show status of all editor configurations."""
-    if verbose or VERBOSE_MODE:
-        configure_debug_logging()
-
-    try:
-        manager = MCPManager(config)
-        status_info = manager.status()
-
-        print(f"{Fore.CYAN}📊 MCP Commander Status{Style.RESET_ALL}")
-        print(f"{Fore.BLUE}{'=' * 30}{Style.RESET_ALL}")
-        print(f"Configuration: {status_info['config_path']}")
-        print()
-
-        # Create status table
-        table = Table(title="Editor Configurations", box=box.ROUNDED)
-        table.add_column("Editor", style="cyan")
-        table.add_column("Config Path", style="blue")
-        table.add_column("Status", style="bold")
-        table.add_column("Servers", style="magenta", justify="center")
-
-        for editor_name, editor_status in status_info["editors"].items():
-            if "error" in editor_status:
-                status = f"[red]Error: {editor_status['error']}[/red]"
-                servers = "N/A"
-                config_path = editor_status.get("config_path", "Unknown")
-            else:
-                exists = editor_status.get("exists", False)
-                readable = editor_status.get("readable", False)
-                writable = editor_status.get("writable", False)
-
-                if exists and readable:
-                    status = "[green]✅ Available[/green]"
-                elif exists and not readable:
-                    status = "[yellow]⚠️  Permission Issue[/yellow]"
-                elif not exists and writable:
-                    status = "[blue]📁 Ready to Create[/blue]"
-                else:
-                    status = "[red]❌ Not Available[/red]"
-
-                servers = str(editor_status.get("server_count", 0))
-                config_path = editor_status.get("config_path", "")
-
-            table.add_row(editor_name.upper(), config_path, status, servers)
-
-        console.print(table)
-
-    except MCPCommanderError as e:
-        print(f"{Fore.RED}❌ Error: {e}{Style.RESET_ALL}")
-        if e.details:
-            print(f"{Fore.YELLOW}   Details: {e.details}{Style.RESET_ALL}")
-        raise typer.Exit(1) from None
-    except Exception as e:
-        print(f"{Fore.RED}❌ Unexpected error: {e}{Style.RESET_ALL}")
-        if verbose or VERBOSE_MODE:
-            logger.exception("Unexpected error in status command")
-        raise typer.Exit(1) from e
-
-
-@app.command()
-def discover(
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
-    help: bool = typer.Option(
-        False,
-        "--help",
-        callback=help_callback,
-        expose_value=False,
-        is_eager=True,
-        help="Show this message and exit.",
-    ),
-) -> None:
-    """Discover all MCP configurations on the system."""
-    if verbose or VERBOSE_MODE:
-        configure_debug_logging()
-
-    try:
-        manager = MCPManager()
-        manager.print_discovery_report()
-        
-        # Populate config with discovered editors
-        added_editors = manager.populate_config_with_discovered()
-        
-        if added_editors:
-            print(f"\n{Fore.CYAN}✅ Updated MCP Commander configuration:{Style.RESET_ALL}")
-            for editor_name, config_path in added_editors.items():
-                print(f"  + {editor_name.upper():<15} {config_path}")
-            print(f"\n{Fore.GREEN}Run 'mcp status' to see the updated configuration.{Style.RESET_ALL}")
+                raise typer.Exit(1)
         else:
-            print(f"\n{Fore.YELLOW}No editors were added to configuration (they may already exist).{Style.RESET_ALL}")
+            result = manager.add_server(server_name, server_config, editor, env_vars)
+
+            if not result["failed"]:
+                target = editor or "all configured editors"
+                print(
+                    f"{Fore.GREEN}✅ Successfully added server '{server_name}' to {target}{Style.RESET_ALL}"
+                )
+            else:
+                raise typer.Exit(1)
 
     except MCPCommanderError as e:
         print(f"{Fore.RED}❌ Error: {e}{Style.RESET_ALL}")
@@ -500,37 +230,11 @@ def discover(
     except Exception as e:
         print(f"{Fore.RED}❌ Unexpected error: {e}{Style.RESET_ALL}")
         if verbose or VERBOSE_MODE:
-            logger.exception("Unexpected error in discover command")
+            logger.exception("Unexpected error in add server command")
         raise typer.Exit(1) from e
 
 
-@app.command()
-def editors(
-    config: Path | None = typer.Option(None, "--config", "-c", help="Configuration file path"),
-    help: bool = typer.Option(
-        False,
-        "--help",
-        callback=help_callback,
-        expose_value=False,
-        is_eager=True,
-        help="Show this message and exit.",
-    ),
-) -> None:
-    """List available editors in configuration."""
-    try:
-        manager = MCPManager(config)
-        available_editors = manager.get_available_editors()
-
-        print(f"{Fore.CYAN}📝 Available Editors:{Style.RESET_ALL}")
-        for editor in available_editors:
-            print(f"  - {editor}")
-
-    except MCPCommanderError as e:
-        print(f"{Fore.RED}❌ Error: {e}{Style.RESET_ALL}")
-        raise typer.Exit(1) from None
-
-
-@app.command("add-editor")
+@add_app.command("editor")
 def add_editor(
     name: str = typer.Argument(..., help="Name of the editor (e.g., 'vscode-custom')"),
     config_path: str = typer.Argument(..., help="Path to the editor's MCP configuration file"),
@@ -538,7 +242,7 @@ def add_editor(
         "mcpServers", "--jsonpath", "-j", help="JSONPath to MCP servers section"
     ),
     config: Path | None = typer.Option(None, "--config", "-c", help="Configuration file path"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable debug logging"),
     help: bool = typer.Option(
         False,
         "--help",
@@ -567,8 +271,8 @@ def add_editor(
         print(f"{Fore.CYAN}   Config Path: {config_path}{Style.RESET_ALL}")
         print(f"{Fore.CYAN}   JSON Path: {jsonpath}{Style.RESET_ALL}")
         print(f"\n{Fore.YELLOW}💡 You can now use '{name}' with other commands:{Style.RESET_ALL}")
-        print(f'{Fore.WHITE}   mcp add server-name "command" {name}{Style.RESET_ALL}')
-        print(f"{Fore.WHITE}   mcp list {name}{Style.RESET_ALL}")
+        print(f'{Fore.WHITE}   mcp add server server-name "command" {name}{Style.RESET_ALL}')
+        print(f"{Fore.WHITE}   mcp config servers {name}{Style.RESET_ALL}")
 
     except MCPCommanderError as e:
         print(f"{Fore.RED}❌ Error: {e}{Style.RESET_ALL}")
@@ -578,15 +282,79 @@ def add_editor(
     except Exception as e:
         print(f"{Fore.RED}❌ Unexpected error: {e}{Style.RESET_ALL}")
         if verbose or VERBOSE_MODE:
-            logger.exception("Unexpected error in add-editor command")
+            logger.exception("Unexpected error in add editor command")
         raise typer.Exit(1) from e
 
 
-@app.command("remove-editor")
+@add_app.command("help")
+def add_help() -> None:
+    """Show help for add commands."""
+    print(f"{Fore.CYAN}📖 Add Commands Help{Style.RESET_ALL}")
+    print(f"{Fore.BLUE}{'=' * 30}{Style.RESET_ALL}")
+    print()
+    print(f"{Fore.GREEN}mcp add server{Style.RESET_ALL} - Add MCP server to editors")
+    print(f'  {Fore.WHITE}mcp add server myserver "npx server" --all{Style.RESET_ALL}')
+    print(f'  {Fore.WHITE}mcp add server myserver "npx server" claude-code{Style.RESET_ALL}')
+    print()
+    print(f"{Fore.GREEN}mcp add editor{Style.RESET_ALL} - Add support for a new editor")
+    print(f'  {Fore.WHITE}mcp add editor custom-editor "/path/to/config.json"{Style.RESET_ALL}')
+    print()
+    print(f"{Fore.YELLOW}💡 Use --help with any subcommand for detailed options{Style.RESET_ALL}")
+
+
+# =============================================================================
+# REMOVE COMMANDS
+# =============================================================================
+
+
+@remove_app.command("server")
+def remove_server(
+    server_name: str = typer.Argument(..., help="Name of the server to remove"),
+    editor: str | None = typer.Argument(None, help="Specific editor to remove server from"),
+    config: Path | None = typer.Option(None, "--config", "-c", help="Configuration file path"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable debug logging"),
+    help: bool = typer.Option(
+        False,
+        "--help",
+        callback=help_callback,
+        expose_value=False,
+        is_eager=True,
+        help="Show this message and exit.",
+    ),
+) -> None:
+    """Remove MCP server from editors."""
+    if verbose or VERBOSE_MODE:
+        configure_debug_logging()
+
+    try:
+        manager = MCPManager(config)
+        result = manager.remove_server(server_name, editor)
+
+        if not result["failed"]:
+            target = editor or "all configured editors"
+            print(
+                f"{Fore.GREEN}✅ Successfully removed server '{server_name}' from {target}{Style.RESET_ALL}"
+            )
+        else:
+            raise typer.Exit(1)
+
+    except MCPCommanderError as e:
+        print(f"{Fore.RED}❌ Error: {e}{Style.RESET_ALL}")
+        if e.details:
+            print(f"{Fore.YELLOW}   Details: {e.details}{Style.RESET_ALL}")
+        raise typer.Exit(1) from None
+    except Exception as e:
+        print(f"{Fore.RED}❌ Unexpected error: {e}{Style.RESET_ALL}")
+        if verbose or VERBOSE_MODE:
+            logger.exception("Unexpected error in remove server command")
+        raise typer.Exit(1) from e
+
+
+@remove_app.command("editor")
 def remove_editor(
     name: str = typer.Argument(..., help="Name of the editor to remove"),
     config: Path | None = typer.Option(None, "--config", "-c", help="Configuration file path"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable debug logging"),
     help: bool = typer.Option(
         False,
         "--help",
@@ -625,70 +393,44 @@ def remove_editor(
     except Exception as e:
         print(f"{Fore.RED}❌ Unexpected error: {e}{Style.RESET_ALL}")
         if verbose or VERBOSE_MODE:
-            logger.exception("Unexpected error in remove-editor command")
+            logger.exception("Unexpected error in remove editor command")
         raise typer.Exit(1) from e
 
 
-@app.command()
-def examples(
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed examples"),
-    help: bool = typer.Option(
-        False,
-        "--help",
-        callback=help_callback,
-        expose_value=False,
-        is_eager=True,
-        help="Show this message and exit.",
+@remove_app.command("help")
+def remove_help() -> None:
+    """Show help for remove commands."""
+    print(f"{Fore.CYAN}📖 Remove Commands Help{Style.RESET_ALL}")
+    print(f"{Fore.BLUE}{'=' * 30}{Style.RESET_ALL}")
+    print()
+    print(f"{Fore.GREEN}mcp remove server{Style.RESET_ALL} - Remove MCP server from editors")
+    print(f"  {Fore.WHITE}mcp remove server myserver{Style.RESET_ALL}")
+    print(f"  {Fore.WHITE}mcp remove server myserver claude-code{Style.RESET_ALL}")
+    print()
+    print(f"{Fore.GREEN}mcp remove editor{Style.RESET_ALL} - Remove support for an editor")
+    print(f"  {Fore.WHITE}mcp remove editor custom-editor{Style.RESET_ALL}")
+    print()
+    print(f"{Fore.YELLOW}💡 Use --help with any subcommand for detailed options{Style.RESET_ALL}")
+
+
+# =============================================================================
+# BACKUP COMMANDS
+# =============================================================================
+
+
+@backup_app.command("create")
+def backup_create(
+    editor: str | None = typer.Argument(
+        None, help="Specific editor to backup (or all if not specified)"
     ),
-) -> None:
-    """Show examples of MCP server configuration formats."""
-    from mcpcommander.utils.config_parser import print_transport_examples
-
-    try:
-        print_transport_examples()
-
-        if verbose:
-            print(f"\n{Fore.CYAN}💡 Usage Examples:{Style.RESET_ALL}")
-            print(f"{Fore.WHITE}  # Add STDIO server (traditional):{Style.RESET_ALL}")
-            print(
-                f'{Fore.GREEN}  mcp add my-server "npx @modelcontextprotocol/server-filesystem /Users/user"{Style.RESET_ALL}'
-            )
-            print()
-            print(f"{Fore.WHITE}  # Add HTTP transport server:{Style.RESET_ALL}")
-            http_config = '{"transport": {"type": "http", "host": "localhost", "port": 3000}}'
-            print(f"{Fore.GREEN}  mcp add api-server '{http_config}'{Style.RESET_ALL}")
-            print()
-            print(f"{Fore.WHITE}  # Add WebSocket server:{Style.RESET_ALL}")
-            ws_config = '{"transport": {"type": "websocket", "url": "ws://localhost:8080/mcp"}}'
-            print(f"{Fore.GREEN}  mcp add ws-server '{ws_config}'{Style.RESET_ALL}")
-            print()
-            print(f"{Fore.WHITE}  # Quick URL format (auto-detects transport):{Style.RESET_ALL}")
-            print(
-                f'{Fore.GREEN}  mcp add sse-server "https://example.com/mcp/stream"{Style.RESET_ALL}'
-            )
-
-    except Exception as e:
-        print(f"{Fore.RED}{UNICODE_CHARS['cross']} Error showing examples: {e}{Style.RESET_ALL}")
-        raise typer.Exit(1) from e
-
-
-@app.command()
-def help() -> None:
-    """Show help information (alias for --help)."""
-    # Show help by calling the app with --help
-    import sys
-
-    sys.argv = [sys.argv[0], "--help"]
-    app()
-
-
-@app.command()
-def backup(
-    editor: str | None = typer.Argument(None, help="Specific editor to backup (or all if not specified)"),
-    description: str | None = typer.Option(None, "--description", "-d", help="Description for the backup"),
-    interactive: bool = typer.Option(True, "--interactive/--no-interactive", help="Ask for description interactively"),
+    description: str | None = typer.Option(
+        None, "--description", "-d", help="Description for the backup"
+    ),
+    interactive: bool = typer.Option(
+        True, "--interactive/--no-interactive", help="Ask for description interactively"
+    ),
     config: Path | None = typer.Option(None, "--config", "-c", help="Configuration file path"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable debug logging"),
     help: bool = typer.Option(
         False,
         "--help",
@@ -727,16 +469,18 @@ def backup(
     except Exception as e:
         print(f"{Fore.RED}❌ Unexpected error: {e}{Style.RESET_ALL}")
         if verbose or VERBOSE_MODE:
-            logger.exception("Unexpected error in backup command")
+            logger.exception("Unexpected error in backup create command")
         raise typer.Exit(1) from e
 
 
-@app.command()
-def restore(
-    backup_id: str | None = typer.Argument(None, help="Backup ID to restore (interactive selection if not provided)"),
+@backup_app.command("restore")
+def backup_restore(
+    backup_id: str | None = typer.Argument(
+        None, help="Backup ID to restore (interactive selection if not provided)"
+    ),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompts"),
     config: Path | None = typer.Option(None, "--config", "-c", help="Configuration file path"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable debug logging"),
     help: bool = typer.Option(
         False,
         "--help",
@@ -781,13 +525,15 @@ def restore(
         print(f"  Files: {', '.join(backup_info.files_backed_up)}")
 
         if not force:
-            if not confirm_action("Proceed with restore? This will overwrite existing configurations"):
+            if not confirm_action(
+                "Proceed with restore? This will overwrite existing configurations"
+            ):
                 print(f"{Fore.YELLOW}Restore cancelled.{Style.RESET_ALL}")
                 raise typer.Exit(0)
 
         # Perform restore
         print(f"\n{Fore.CYAN}🔄 Restoring configurations...{Style.RESET_ALL}")
-        results = manager.restore_backup(backup_id, force=force)
+        manager.restore_backup(backup_id, force=force)
 
         print(f"\n{Fore.CYAN}📊 Restore completed.{Style.RESET_ALL}")
 
@@ -799,15 +545,15 @@ def restore(
     except Exception as e:
         print(f"{Fore.RED}❌ Unexpected error: {e}{Style.RESET_ALL}")
         if verbose or VERBOSE_MODE:
-            logger.exception("Unexpected error in restore command")
+            logger.exception("Unexpected error in backup restore command")
         raise typer.Exit(1) from e
 
 
-@app.command("backup-list")
+@backup_app.command("list")
 def backup_list(
     editor: str | None = typer.Argument(None, help="Filter by specific editor"),
     config: Path | None = typer.Option(None, "--config", "-c", help="Configuration file path"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable debug logging"),
     help: bool = typer.Option(
         False,
         "--help",
@@ -833,7 +579,9 @@ def backup_list(
             return
 
         # Create backup table
-        table = Table(title=f"Available Backups{f' for {editor}' if editor else ''}", box=box.ROUNDED)
+        table = Table(
+            title=f"Available Backups{f' for {editor}' if editor else ''}", box=box.ROUNDED
+        )
         table.add_column("Backup ID", style="cyan")
         table.add_column("Timestamp", style="blue")
         table.add_column("Type", style="magenta")
@@ -843,13 +591,13 @@ def backup_list(
         for backup in backups:
             backup_type = backup.display_name
             files_info = ", ".join(backup.files_backed_up) if backup.files_backed_up else "None"
-            
+
             table.add_row(
                 backup.backup_id,
                 backup.formatted_timestamp,
                 backup_type,
                 files_info,
-                backup.description
+                backup.description,
             )
 
         console.print(table)
@@ -870,16 +618,18 @@ def backup_list(
     except Exception as e:
         print(f"{Fore.RED}❌ Unexpected error: {e}{Style.RESET_ALL}")
         if verbose or VERBOSE_MODE:
-            logger.exception("Unexpected error in backup-list command")
+            logger.exception("Unexpected error in backup list command")
         raise typer.Exit(1) from e
 
 
-@app.command("backup-delete")
+@backup_app.command("delete")
 def backup_delete(
-    backup_id: str | None = typer.Argument(None, help="Backup ID to delete (interactive selection if not provided)"),
+    backup_id: str | None = typer.Argument(
+        None, help="Backup ID to delete (interactive selection if not provided)"
+    ),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt"),
     config: Path | None = typer.Option(None, "--config", "-c", help="Configuration file path"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable debug logging"),
     help: bool = typer.Option(
         False,
         "--help",
@@ -938,16 +688,18 @@ def backup_delete(
     except Exception as e:
         print(f"{Fore.RED}❌ Unexpected error: {e}{Style.RESET_ALL}")
         if verbose or VERBOSE_MODE:
-            logger.exception("Unexpected error in backup-delete command")
+            logger.exception("Unexpected error in backup delete command")
         raise typer.Exit(1) from e
 
 
-@app.command("backup-config")
+@backup_app.command("config")
 def backup_config(
-    max_backups: int | None = typer.Option(None, "--max-backups", help="Set maximum number of backups to keep"),
+    max_backups: int | None = typer.Option(
+        None, "--max-backups", help="Set maximum number of backups to keep"
+    ),
     show: bool = typer.Option(False, "--show", help="Show current backup configuration"),
     config: Path | None = typer.Option(None, "--config", "-c", help="Configuration file path"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable debug logging"),
     help: bool = typer.Option(
         False,
         "--help",
@@ -971,16 +723,16 @@ def backup_config(
         if show or max_backups is None:
             # Show current configuration
             stats = manager.get_backup_stats()
-            
+
             print(f"{Fore.CYAN}📊 Backup Configuration:{Style.RESET_ALL}")
             print(f"  Maximum backups: {stats['max_backups']}")
             print(f"  Current backups: {stats['total_backups']}")
             print(f"  Storage used: {stats['total_size_mb']} MB")
             print(f"  Backup directory: {stats['backup_directory']}")
-            
-            if stats['editor_counts']:
+
+            if stats["editor_counts"]:
                 print(f"\n{Fore.CYAN}📝 Editor Backup Counts:{Style.RESET_ALL}")
-                for editor, count in stats['editor_counts'].items():
+                for editor, count in stats["editor_counts"].items():
                     print(f"  {editor}: {count} backup(s)")
 
     except MCPCommanderError as e:
@@ -991,15 +743,379 @@ def backup_config(
     except Exception as e:
         print(f"{Fore.RED}❌ Unexpected error: {e}{Style.RESET_ALL}")
         if verbose or VERBOSE_MODE:
-            logger.exception("Unexpected error in backup-config command")
+            logger.exception("Unexpected error in backup config command")
+        raise typer.Exit(1) from e
+
+
+@backup_app.command("help")
+def backup_help() -> None:
+    """Show help for backup commands."""
+    print(f"{Fore.CYAN}📖 Backup Commands Help{Style.RESET_ALL}")
+    print(f"{Fore.BLUE}{'=' * 30}{Style.RESET_ALL}")
+    print()
+    print(f"{Fore.GREEN}mcp backup create{Style.RESET_ALL} - Create a backup of MCP configurations")
+    print(f"  {Fore.WHITE}mcp backup create{Style.RESET_ALL}")
+    print(
+        f'  {Fore.WHITE}mcp backup create claude-code --description "Before update"{Style.RESET_ALL}'
+    )
+    print()
+    print(f"{Fore.GREEN}mcp backup restore{Style.RESET_ALL} - Restore a backup")
+    print(f"  {Fore.WHITE}mcp backup restore{Style.RESET_ALL}")
+    print(f"  {Fore.WHITE}mcp backup restore backup-id-123{Style.RESET_ALL}")
+    print()
+    print(f"{Fore.GREEN}mcp backup list{Style.RESET_ALL} - List available backups")
+    print(f"  {Fore.WHITE}mcp backup list{Style.RESET_ALL}")
+    print(f"  {Fore.WHITE}mcp backup list claude-code{Style.RESET_ALL}")
+    print()
+    print(f"{Fore.GREEN}mcp backup delete{Style.RESET_ALL} - Delete a backup")
+    print(f"  {Fore.WHITE}mcp backup delete{Style.RESET_ALL}")
+    print(f"  {Fore.WHITE}mcp backup delete backup-id-123{Style.RESET_ALL}")
+    print()
+    print(f"{Fore.GREEN}mcp backup config{Style.RESET_ALL} - Configure backup settings")
+    print(f"  {Fore.WHITE}mcp backup config --show{Style.RESET_ALL}")
+    print(f"  {Fore.WHITE}mcp backup config --max-backups 20{Style.RESET_ALL}")
+    print()
+    print(f"{Fore.YELLOW}💡 Use --help with any subcommand for detailed options{Style.RESET_ALL}")
+
+
+# =============================================================================
+# REMAINING MAIN LEVEL COMMANDS
+# =============================================================================
+# Note: list, status, and selfdestruct have been moved to 'mcp config' subcommands
+
+
+@app.command()
+def discover(
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable debug logging"),
+    help: bool = typer.Option(
+        False,
+        "--help",
+        callback=help_callback,
+        expose_value=False,
+        is_eager=True,
+        help="Show this message and exit.",
+    ),
+) -> None:
+    """Discover all MCP configurations on the system."""
+    if verbose or VERBOSE_MODE:
+        configure_debug_logging()
+
+    try:
+        manager = MCPManager()
+        manager.print_discovery_report()
+
+        # Populate config with discovered editors
+        added_editors = manager.populate_config_with_discovered()
+
+        if added_editors:
+            print(f"\n{Fore.CYAN}✅ Updated MCP Commander configuration:{Style.RESET_ALL}")
+            for editor_name, config_path in added_editors.items():
+                print(f"  + {editor_name.upper():<15} {config_path}")
+            print(
+                f"\n{Fore.GREEN}Run 'mcp config show' to see the updated configuration.{Style.RESET_ALL}"
+            )
+        else:
+            print(
+                f"\n{Fore.YELLOW}No editors were added to configuration (they may already exist).{Style.RESET_ALL}"
+            )
+
+    except MCPCommanderError as e:
+        print(f"{Fore.RED}❌ Error: {e}{Style.RESET_ALL}")
+        if e.details:
+            print(f"{Fore.YELLOW}   Details: {e.details}{Style.RESET_ALL}")
+        raise typer.Exit(1) from None
+    except Exception as e:
+        print(f"{Fore.RED}❌ Unexpected error: {e}{Style.RESET_ALL}")
+        if verbose or VERBOSE_MODE:
+            logger.exception("Unexpected error in discover command")
         raise typer.Exit(1) from e
 
 
 @app.command()
-def selfdestruct(
-    include_backups: bool = typer.Option(False, "--include-backups", help="Also remove all backup files"),
+def editors(
+    config: Path | None = typer.Option(None, "--config", "-c", help="Configuration file path"),
+    help: bool = typer.Option(
+        False,
+        "--help",
+        callback=help_callback,
+        expose_value=False,
+        is_eager=True,
+        help="Show this message and exit.",
+    ),
+) -> None:
+    """List available editors in configuration."""
+    try:
+        manager = MCPManager(config)
+        available_editors = manager.get_available_editors()
+
+        print(f"{Fore.CYAN}📝 Available Editors:{Style.RESET_ALL}")
+        for editor in available_editors:
+            print(f"  - {editor}")
+
+    except MCPCommanderError as e:
+        print(f"{Fore.RED}❌ Error: {e}{Style.RESET_ALL}")
+        raise typer.Exit(1) from None
+
+
+@app.command()
+def examples(
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable debug logging"),
+    help: bool = typer.Option(
+        False,
+        "--help",
+        callback=help_callback,
+        expose_value=False,
+        is_eager=True,
+        help="Show this message and exit.",
+    ),
+) -> None:
+    """Show examples of MCP server configuration formats."""
+    if verbose or VERBOSE_MODE:
+        configure_debug_logging()
+
+    from mcpcommander.utils.config_parser import print_transport_examples
+
+    try:
+        print_transport_examples()
+
+        # Always show usage examples (no longer dependent on verbose flag)
+        print(f"\n{Fore.CYAN}💡 Usage Examples:{Style.RESET_ALL}")
+        print(f"{Fore.WHITE}  # Add STDIO server (traditional):{Style.RESET_ALL}")
+        print(
+            f'{Fore.GREEN}  mcp add server my-server "npx @modelcontextprotocol/server-filesystem /Users/user"{Style.RESET_ALL}'
+        )
+        print()
+        print(f"{Fore.WHITE}  # Add HTTP transport server:{Style.RESET_ALL}")
+        http_config = '{"transport": {"type": "http", "host": "localhost", "port": 3000}}'
+        print(f"{Fore.GREEN}  mcp add server api-server '{http_config}'{Style.RESET_ALL}")
+        print()
+        print(f"{Fore.WHITE}  # Add WebSocket server:{Style.RESET_ALL}")
+        ws_config = '{"transport": {"type": "websocket", "url": "ws://localhost:8080/mcp"}}'
+        print(f"{Fore.GREEN}  mcp add server ws-server '{ws_config}'{Style.RESET_ALL}")
+        print()
+        print(f"{Fore.WHITE}  # Quick URL format (auto-detects transport):{Style.RESET_ALL}")
+        print(
+            f'{Fore.GREEN}  mcp add server sse-server "https://example.com/mcp/stream"{Style.RESET_ALL}'
+        )
+
+    except Exception as e:
+        print(f"{Fore.RED}{UNICODE_CHARS['cross']} Error showing examples: {e}{Style.RESET_ALL}")
+        if verbose or VERBOSE_MODE:
+            logger.exception("Unexpected error in examples command")
+        raise typer.Exit(1) from e
+
+
+# =============================================================================
+# CONFIG COMMANDS
+# =============================================================================
+
+
+@config_app.command("servers")
+def config_servers(
+    editor: str | None = typer.Argument(None, help="Specific editor to list servers for"),
+    config: Path | None = typer.Option(None, "--config", "-c", help="Configuration file path"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable debug logging"),
+    help: bool = typer.Option(
+        False,
+        "--help",
+        callback=help_callback,
+        expose_value=False,
+        is_eager=True,
+        help="Show this message and exit.",
+    ),
+) -> None:
+    """List configured MCP servers."""
+    if verbose or VERBOSE_MODE:
+        configure_debug_logging()
+    try:
+        manager = MCPManager(config)
+        servers = manager.list_servers(editor)
+
+        if not servers or not any(servers.values()):
+            print(
+                f"{Fore.YELLOW}{UNICODE_CHARS['cross']} No MCP servers configured{Style.RESET_ALL}"
+            )
+            return
+
+        # Create rich table
+        table = Table(title="Configured MCP Servers")
+        table.add_column("Editor", style="cyan", no_wrap=True)
+        table.add_column("Server Name", style="magenta")
+        table.add_column("Transport", style="blue")
+        table.add_column("Command/URL", style="green")
+        table.add_column("Details", style="white", max_width=30)
+
+        for editor_name, editor_servers in servers.items():
+            if not editor_servers:
+                continue
+            for server_name, server_config in editor_servers.items():
+                command = server_config.get("command", "")
+                args = server_config.get("args", [])
+                transport = server_config.get("transport", {})
+
+                if transport:
+                    transport_type = transport.get("type", "Unknown").upper()
+                    if transport_type == "HTTP":
+                        command_display = f"{transport.get('host', '')}:{transport.get('port', '')}"
+                        details = "HTTP Server"
+                    elif transport_type == "WEBSOCKET":
+                        command_display = transport.get("url", "")
+                        details = "WebSocket"
+                    else:
+                        command_display = str(transport)
+                        details = transport_type
+                else:
+                    transport_type = "STDIO"
+                    command_display = command
+                    details = " ".join(args[:3]) if args else ""
+                    if len(args) > 3:
+                        details += "..."
+
+                table.add_row(
+                    editor_name.upper(), server_name, transport_type, command_display, details
+                )
+
+        console.print(table)
+
+    except MCPCommanderError as e:
+        print(f"{Fore.RED}{UNICODE_CHARS['cross']} {e}{Style.RESET_ALL}")
+        if e.details:
+            print(f"{Fore.YELLOW}   Details: {e.details}{Style.RESET_ALL}")
+        raise typer.Exit(1) from None
+    except Exception as e:
+        print(f"{Fore.RED}❌ Unexpected error: {e}{Style.RESET_ALL}")
+        if verbose or VERBOSE_MODE:
+            logger.exception("Unexpected error in config servers command")
+        raise typer.Exit(1) from e
+
+
+@config_app.command("show")
+def config_show(
+    config: Path | None = typer.Option(None, "--config", "-c", help="Configuration file path"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable debug logging"),
+    help: bool = typer.Option(
+        False,
+        "--help",
+        callback=help_callback,
+        expose_value=False,
+        is_eager=True,
+        help="Show this message and exit.",
+    ),
+) -> None:
+    """Show status of all editor configurations."""
+    if verbose or VERBOSE_MODE:
+        configure_debug_logging()
+    try:
+        manager = MCPManager(config)
+        status_info = manager.get_status()
+
+        print(f"{Fore.CYAN}{UNICODE_CHARS['line'] * 50}{Style.RESET_ALL}")
+        print(f"{Fore.CYAN}         MCP Commander Configuration Status{Style.RESET_ALL}")
+        print(f"{Fore.CYAN}{UNICODE_CHARS['line'] * 50}{Style.RESET_ALL}")
+
+        # Configuration summary
+        total_editors = len(status_info.get("editors", {}))
+        total_servers = sum(
+            len(info.get("servers", {})) for info in status_info.get("editors", {}).values()
+        )
+
+        print(f"\n{Fore.WHITE}📋 Configuration Summary:{Style.RESET_ALL}")
+        print(f"   📁 Configuration File: {status_info.get('config_file', 'Unknown')}")
+        print(f"   🎛️  Configured Editors: {total_editors}")
+        print(f"   🚀 Total MCP Servers: {total_servers}")
+
+        # Editor status
+        print(f"\n{Fore.WHITE}📊 Editor Status:{Style.RESET_ALL}")
+        editors = status_info.get("editors", {})
+
+        if not editors:
+            print(f"   {Fore.YELLOW}⚠️  No editors configured{Style.RESET_ALL}")
+        else:
+            for editor_name, editor_info in editors.items():
+                config_path = editor_info.get("config_path", "Unknown")
+                exists = editor_info.get("exists", False)
+                server_count = len(editor_info.get("servers", {}))
+
+                status_icon = UNICODE_CHARS["checkmark"] if exists else UNICODE_CHARS["cross"]
+                status_color = Fore.GREEN if exists else Fore.RED
+
+                print(
+                    f"   {status_color}{status_icon} {editor_name.upper():<12} ({server_count} servers){Style.RESET_ALL}"
+                )
+                print(f"      📄 {config_path}")
+
+        print(f"\n{Fore.CYAN}{UNICODE_CHARS['line'] * 50}{Style.RESET_ALL}")
+
+    except MCPCommanderError as e:
+        print(f"{Fore.RED}{UNICODE_CHARS['cross']} {e}{Style.RESET_ALL}")
+        if e.details:
+            print(f"{Fore.YELLOW}   Details: {e.details}{Style.RESET_ALL}")
+        raise typer.Exit(1) from None
+    except Exception as e:
+        print(f"{Fore.RED}❌ Unexpected error: {e}{Style.RESET_ALL}")
+        if verbose or VERBOSE_MODE:
+            logger.exception("Unexpected error in config show command")
+        raise typer.Exit(1) from e
+
+
+@config_app.command("path")
+def config_path(
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable debug logging"),
+    help: bool = typer.Option(
+        False,
+        "--help",
+        callback=help_callback,
+        expose_value=False,
+        is_eager=True,
+        help="Show this message and exit.",
+    ),
+) -> None:
+    """Display the absolute path to MCP Commander's configuration file."""
+    if verbose or VERBOSE_MODE:
+        configure_debug_logging()
+
+    try:
+        manager = MCPManager()
+        config_path = manager.get_config_path()
+
+        print(f"{Fore.CYAN}📂 MCP Commander Configuration Location{Style.RESET_ALL}")
+        print(f"{Fore.CYAN}{UNICODE_CHARS['line'] * 50}{Style.RESET_ALL}")
+        print(f"\n{Fore.WHITE}Configuration File:{Style.RESET_ALL}")
+        print(f"   📄 {config_path}")
+        print(f"\n{Fore.WHITE}Configuration Directory:{Style.RESET_ALL}")
+        print(f"   📁 {config_path.parent}")
+
+        # Check if file exists
+        if config_path.exists():
+            print(
+                f"\n{Fore.GREEN}{UNICODE_CHARS['checkmark']} Configuration file exists{Style.RESET_ALL}"
+            )
+        else:
+            print(
+                f"\n{Fore.YELLOW}⚠️  Configuration file does not exist (will be created on first use){Style.RESET_ALL}"
+            )
+
+        print(f"\n{Fore.CYAN}💡 Usage:{Style.RESET_ALL}")
+        print("   You can specify a custom config file with: --config /path/to/config.json")
+        print("   The default location follows your OS conventions:")
+        print("   • Windows: %APPDATA%\\mcpCommander\\config.json")
+        print("   • macOS:   ~/Library/Application Support/mcpCommander/config.json")
+        print("   • Linux:   ~/.config/mcpCommander/config.json")
+
+    except Exception as e:
+        print(f"{Fore.RED}❌ Error getting config path: {e}{Style.RESET_ALL}")
+        if verbose or VERBOSE_MODE:
+            logger.exception("Unexpected error in config path command")
+        raise typer.Exit(1) from e
+
+
+@config_app.command("reset")
+def config_reset(
+    include_backups: bool = typer.Option(
+        False, "--include-backups", help="Also remove all backup files"
+    ),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable debug logging"),
     help: bool = typer.Option(
         False,
         "--help",
@@ -1012,73 +1128,74 @@ def selfdestruct(
     """Reset MCP Commander configuration to default (empty) state for testing autodiscovery."""
     if verbose or VERBOSE_MODE:
         configure_debug_logging()
-
     try:
-        from mcpcommander.utils.paths import get_user_config_file, get_user_config_dir
-        from mcpcommander.core.backup import BackupManager
-        
-        config_file = get_user_config_file()
-        config_dir = get_user_config_dir()
-        
-        # Show what will be removed
-        print(f"{Fore.CYAN}💣 Self-Destruct Configuration:{Style.RESET_ALL}")
-        print(f"  Config file: {config_file}")
-        
-        if include_backups:
-            backup_manager = BackupManager()
-            backup_dir = backup_manager.backup_root
-            print(f"  Backup directory: {backup_dir}")
-            print(f"{Fore.YELLOW}  WARNING: All backup files will be permanently removed!{Style.RESET_ALL}")
-        else:
-            print(f"{Fore.GREEN}  Backups will be preserved{Style.RESET_ALL}")
-        
-        # Confirm action 
         if not force:
-            action_text = "reset configuration to empty state"
+            print(
+                f"{Fore.YELLOW}⚠️  This will reset MCP Commander to its default (empty) configuration.{Style.RESET_ALL}"
+            )
+            print(
+                f"{Fore.WHITE}This is useful for testing the autodiscovery functionality.{Style.RESET_ALL}"
+            )
+
             if include_backups:
-                action_text += " and remove all backups"
-            
-            if not confirm_action(f"Proceed to {action_text}?"):
-                print(f"{Fore.YELLOW}Self-destruct cancelled.{Style.RESET_ALL}")
-                raise typer.Exit(0)
-        
-        # Remove config file if it exists
-        if config_file.exists():
-            config_file.unlink()
-            print(f"{Fore.GREEN}✅ Removed configuration file: {config_file}{Style.RESET_ALL}")
-        else:
-            print(f"{Fore.YELLOW}Configuration file not found: {config_file}{Style.RESET_ALL}")
-        
-        # Create empty config file for clean state
-        empty_config = '{\n  "editors": {}\n}'
-        config_file.write_text(empty_config, encoding="utf-8")
-        print(f"{Fore.GREEN}✅ Created empty configuration file: {config_file}{Style.RESET_ALL}")
-        
-        # Remove backups if requested
+                print(
+                    f"{Fore.RED}⚠️  This will also DELETE ALL BACKUP FILES permanently!{Style.RESET_ALL}"
+                )
+
+            if not confirm_action("Are you sure you want to reset the configuration?"):
+                print(f"{Fore.CYAN}Operation cancelled{Style.RESET_ALL}")
+                return
+
+        manager = MCPManager()
+        manager.reset_configuration(include_backups=include_backups)
+
+        print(
+            f"{Fore.GREEN}{UNICODE_CHARS['checkmark']} Configuration reset to empty state{Style.RESET_ALL}"
+        )
+
         if include_backups:
-            backup_manager = BackupManager()
-            backup_dir = backup_manager.backup_root
-            
-            if backup_dir.exists():
-                import shutil
-                shutil.rmtree(backup_dir)
-                print(f"{Fore.GREEN}✅ Removed backup directory: {backup_dir}{Style.RESET_ALL}")
-            else:
-                print(f"{Fore.YELLOW}No backup directory found: {backup_dir}{Style.RESET_ALL}")
-        
-        print(f"\n{Fore.CYAN}🔄 Self-destruct complete!{Style.RESET_ALL}")
-        print(f"{Fore.WHITE}You can now run 'mcp discover' to test autodiscovery functionality.{Style.RESET_ALL}")
-        
+            print(
+                f"{Fore.GREEN}{UNICODE_CHARS['checkmark']} All backup files removed{Style.RESET_ALL}"
+            )
+
+        print(f"\n{Fore.CYAN}💡 Next steps:{Style.RESET_ALL}")
+        print("   1. Run 'mcp discover' to find MCP configurations")
+        print("   2. Run 'mcp config show' to see the discovered setup")
+        print("   3. Start adding servers with 'mcp add server'")
+
     except MCPCommanderError as e:
-        print(f"{Fore.RED}❌ Error: {e}{Style.RESET_ALL}")
+        print(f"{Fore.RED}{UNICODE_CHARS['cross']} {e}{Style.RESET_ALL}")
         if e.details:
             print(f"{Fore.YELLOW}   Details: {e.details}{Style.RESET_ALL}")
         raise typer.Exit(1) from None
     except Exception as e:
         print(f"{Fore.RED}❌ Unexpected error: {e}{Style.RESET_ALL}")
         if verbose or VERBOSE_MODE:
-            logger.exception("Unexpected error in selfdestruct command")
+            logger.exception("Unexpected error in config reset command")
         raise typer.Exit(1) from e
+
+
+@config_app.command("help")
+def config_help() -> None:
+    """Show help for config commands."""
+    print(f"{Fore.CYAN}📖 Config Commands Help{Style.RESET_ALL}")
+    print(f"{Fore.BLUE}{'=' * 30}{Style.RESET_ALL}")
+    print()
+    print(f"{Fore.GREEN}mcp config servers{Style.RESET_ALL} - List configured MCP servers")
+    print(f"  {Fore.WHITE}mcp config servers{Style.RESET_ALL}")
+    print(f"  {Fore.WHITE}mcp config servers claude-code{Style.RESET_ALL}")
+    print()
+    print(f"{Fore.GREEN}mcp config show{Style.RESET_ALL} - Show configuration status")
+    print(f"  {Fore.WHITE}mcp config show{Style.RESET_ALL}")
+    print()
+    print(f"{Fore.GREEN}mcp config path{Style.RESET_ALL} - Show configuration file path")
+    print(f"  {Fore.WHITE}mcp config path{Style.RESET_ALL}")
+    print()
+    print(f"{Fore.GREEN}mcp config reset{Style.RESET_ALL} - Reset configuration to empty state")
+    print(f"  {Fore.WHITE}mcp config reset{Style.RESET_ALL}")
+    print(f"  {Fore.WHITE}mcp config reset --include-backups{Style.RESET_ALL}")
+    print()
+    print(f"{Fore.YELLOW}💡 Use --help with any subcommand for detailed options{Style.RESET_ALL}")
 
 
 @app.command()
@@ -1094,6 +1211,16 @@ def version(
 ) -> None:
     """Show version information."""
     print(f"MCP Commander version {__version__}")
+
+
+@app.command()
+def help() -> None:
+    """Show help information (alias for --help)."""
+    # Show help by calling the app with --help
+    import sys
+
+    sys.argv = [sys.argv[0], "--help"]
+    app()
 
 
 def main() -> None:

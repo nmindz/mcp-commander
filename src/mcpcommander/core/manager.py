@@ -266,11 +266,11 @@ class MCPManager:
     def populate_config_with_discovered(self) -> dict[str, str]:
         """Populate configuration with discovered MCP editors."""
         discovered = self.discover_mcp_configs()
-        
+
         # If no discoveries, return empty result
         if not discovered:
             return {}
-        
+
         # Add discovered editors to config
         added_editors = {}
         for editor_name, editor_config in discovered.items():
@@ -280,7 +280,7 @@ class MCPManager:
                 logger.info(f"Added discovered editor '{editor_name}' to configuration")
             except Exception as e:
                 logger.error(f"Failed to add discovered editor '{editor_name}': {e}")
-        
+
         return added_editors
 
     def get_available_editors(self) -> list[str]:
@@ -368,21 +368,19 @@ class MCPManager:
             )
 
     # Backup and Restore Methods
-    
+
     def create_backup(
-        self,
-        editor_name: str | None = None,
-        description: str | None = None
+        self, editor_name: str | None = None, description: str | None = None
     ) -> BackupInfo:
         """Create a backup of MCP configurations.
-        
+
         Args:
             editor_name: Specific editor to backup, None for all editors
             description: Optional description for the backup
-            
+
         Returns:
             BackupInfo: Information about the created backup
-            
+
         Raises:
             BackupError: If backup creation fails
         """
@@ -398,33 +396,35 @@ class MCPManager:
                 # All editors backup
                 for name in self.get_available_editors():
                     editor_configs[name] = self.config_manager.get_editor_config(name)
-                    
+
             # Create the backup
             backup_info = self.backup_manager.create_backup(
-                editor_configs=editor_configs,
-                editor_name=editor_name,
-                description=description
+                editor_configs=editor_configs, editor_name=editor_name, description=description
             )
-            
+
             # Print success message
             if editor_name:
-                print(f"{Fore.GREEN}✅ Created backup for {editor_name}: {backup_info.backup_id}{Style.RESET_ALL}")
+                print(
+                    f"{Fore.GREEN}✅ Created backup for {editor_name}: {backup_info.backup_id}{Style.RESET_ALL}"
+                )
             else:
                 editors_count = len(backup_info.files_backed_up)
-                print(f"{Fore.GREEN}✅ Created backup for {editors_count} editor(s): {backup_info.backup_id}{Style.RESET_ALL}")
-                
+                print(
+                    f"{Fore.GREEN}✅ Created backup for {editors_count} editor(s): {backup_info.backup_id}{Style.RESET_ALL}"
+                )
+
             return backup_info
-            
+
         except Exception as e:
             logger.error(f"Failed to create backup: {e}")
             raise BackupError(f"Failed to create backup: {e}") from e
 
     def list_backups(self, editor_name: str | None = None) -> list[BackupInfo]:
         """List available backups.
-        
+
         Args:
             editor_name: Filter by specific editor name
-            
+
         Returns:
             List of backup information
         """
@@ -434,20 +434,16 @@ class MCPManager:
             logger.error(f"Failed to list backups: {e}")
             raise BackupError(f"Failed to list backups: {e}") from e
 
-    def restore_backup(
-        self,
-        backup_id: str,
-        force: bool = False
-    ) -> dict[str, str]:
+    def restore_backup(self, backup_id: str, force: bool = False) -> dict[str, str]:
         """Restore a backup.
-        
+
         Args:
             backup_id: ID of the backup to restore
             force: Skip confirmation prompts
-            
+
         Returns:
             Dict mapping editor names to restore status messages
-            
+
         Raises:
             BackupError: If restore operation fails
         """
@@ -456,45 +452,45 @@ class MCPManager:
             editor_configs = {}
             for name in self.get_available_editors():
                 editor_configs[name] = self.config_manager.get_editor_config(name)
-                
+
             # Restore the backup
             results = self.backup_manager.restore_backup(
-                backup_id=backup_id,
-                editor_configs=editor_configs,
-                force=force
+                backup_id=backup_id, editor_configs=editor_configs, force=force
             )
-            
+
             # Print results
             successful = []
             failed = []
-            
+
             for editor_name, message in results.items():
                 print(f"  {message}")
                 if message.startswith("✅"):
                     successful.append(editor_name)
                 else:
                     failed.append(editor_name)
-                    
+
             # Print summary
             if successful and not failed:
                 print(f"\n{Fore.GREEN}✅ Successfully restored backup {backup_id}{Style.RESET_ALL}")
             elif successful and failed:
-                print(f"\n{Fore.YELLOW}⚠️  Partially restored backup {backup_id} ({len(successful)}/{len(results)} editors){Style.RESET_ALL}")
+                print(
+                    f"\n{Fore.YELLOW}⚠️  Partially restored backup {backup_id} ({len(successful)}/{len(results)} editors){Style.RESET_ALL}"
+                )
             else:
                 print(f"\n{Fore.RED}❌ Failed to restore backup {backup_id}{Style.RESET_ALL}")
-                
+
             return results
-            
+
         except Exception as e:
             logger.error(f"Failed to restore backup {backup_id}: {e}")
             raise BackupError(f"Failed to restore backup {backup_id}: {e}") from e
 
     def delete_backup(self, backup_id: str) -> None:
         """Delete a backup.
-        
+
         Args:
             backup_id: ID of the backup to delete
-            
+
         Raises:
             BackupError: If deletion fails
         """
@@ -507,10 +503,10 @@ class MCPManager:
 
     def get_backup_info(self, backup_id: str) -> BackupInfo | None:
         """Get detailed information about a backup.
-        
+
         Args:
             backup_id: ID of the backup
-            
+
         Returns:
             BackupInfo if found, None otherwise
         """
@@ -522,10 +518,10 @@ class MCPManager:
 
     def set_max_backups(self, max_backups: int) -> None:
         """Set the maximum number of backups to keep.
-        
+
         Args:
             max_backups: Maximum number of backups (must be >= 1)
-            
+
         Raises:
             ConfigurationError: If max_backups is invalid
         """
@@ -538,7 +534,7 @@ class MCPManager:
 
     def get_backup_stats(self) -> dict[str, Any]:
         """Get backup statistics.
-        
+
         Returns:
             Dictionary with backup statistics
         """
@@ -555,5 +551,61 @@ class MCPManager:
                 "editor_counts": {},
                 "oldest_backup": None,
                 "newest_backup": None,
-                "error": str(e)
+                "error": str(e),
             }
+
+    def get_config_path(self) -> Path:
+        """Get the absolute path to the configuration file.
+
+        Returns:
+            Path: Absolute path to the configuration file
+        """
+        return self.config_manager.config_path.resolve()
+
+    def reset_configuration(self, include_backups: bool = False) -> None:
+        """Reset MCP Commander configuration to empty state.
+
+        Args:
+            include_backups: Whether to also remove all backup files
+
+        Raises:
+            ConfigurationError: If reset fails
+        """
+        try:
+            # Create empty configuration
+            empty_config = {"editors": {}}
+
+            # Write empty config to file
+            config_path = self.config_manager.config_path
+            config_path.parent.mkdir(parents=True, exist_ok=True)
+
+            with open(config_path, "w") as f:
+                import json
+
+                json.dump(empty_config, f, indent=2)
+
+            # Reload configuration
+            self.config_manager._config = None
+
+            # Remove backup files if requested
+            if include_backups:
+                self.backup_manager.clear_all_backups()
+
+            logger.info("Configuration reset to empty state")
+
+        except Exception as e:
+            logger.error(f"Failed to reset configuration: {e}")
+            raise ConfigurationError(f"Failed to reset configuration: {e}") from e
+
+    def get_status(self) -> dict[str, Any]:
+        """Get comprehensive status information.
+
+        Returns:
+            Dictionary containing configuration status and editor information
+        """
+        try:
+            status_info = self.status()  # Use existing status method
+            return status_info
+        except Exception as e:
+            logger.error(f"Failed to get status: {e}")
+            raise ConfigurationError(f"Failed to get status: {e}") from e

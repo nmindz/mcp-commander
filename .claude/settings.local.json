@@ -2,7 +2,12 @@
   "permissions": {
     "allow": [
       "WebSearch",
-      "Bash(mcp discover:*)"
+      "Bash(mcp discover:*)",
+      "Bash(sed:*)",
+      "Bash(ruff check:*)",
+      "Bash(ruff format:*)",
+      "Bash(timeout 30 python -m pytest:*)",
+      "Bash(grep:*)"
     ],
     "deny": [],
     "ask": []
