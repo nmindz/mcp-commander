@@ -1,5 +1,107 @@
 # MCP Commander - Development Plan & Maturity Roadmap
 
+## Critical Bug Fix - QPainter.drawCircle Error
+
+### Issue Analysis
+**Date**: 2025-08-20
+**Priority**: CRITICAL - Application crashes on startup
+**Impact**: GUI cannot render properly, crashes during paint events
+
+**Error Details**:
+```
+AttributeError: 'PySide6.QtGui.QPainter' object has no attribute 'drawCircle'
+QPaintDevice: Cannot destroy paint device that is being painted
+```
+
+**Root Cause**: 
+The `QPainter` class in Qt6/PySide6 doesn't have a `drawCircle` method. The correct method is `drawEllipse`. This error occurs in:
+- `src/mcpcommander/gui/components/progress.py` lines 204 and 327
+
+### Technical Implementation
+
+#### Current Problematic Code:
+```python
+# Line 204: CircularProgress.paintEvent()
+painter.drawCircle(center_x, center_y, radius)
+
+# Line 327: IndeterminateProgress.paintEvent()
+painter.drawCircle(center_x, center_y, radius)
+```
+
+#### Correct Implementation Strategy:
+Replace `painter.drawCircle(center_x, center_y, radius)` with:
+```python
+# Method 1: Using drawEllipse with center point and radii
+painter.drawEllipse(QPoint(center_x, center_y), radius, radius)
+
+# Method 2: Using drawEllipse with rectangle bounds (more common)
+painter.drawEllipse(center_x - radius, center_y - radius, 2 * radius, 2 * radius)
+```
+
+#### Implementation Plan:
+1. **Fix CircularProgress.paintEvent()** (line 204)
+   - Replace drawCircle with drawEllipse using rectangle bounds
+   - Maintain existing visual appearance and positioning
+   
+2. **Fix IndeterminateProgress.paintEvent()** (line 327)
+   - Apply same fix to spinning progress widget
+   - Ensure animation continues to work correctly
+
+3. **Testing Strategy**:
+   - Verify both determinate and indeterminate progress widgets render correctly
+   - Test different sizes and progress values
+   - Confirm no paint device destruction errors
+
+#### Code Quality Considerations:
+- Use rectangle-based drawEllipse for consistency with Qt best practices
+- Maintain existing mathematical calculations for positioning
+- Preserve all existing widget properties and animations
+
+### Implementation Results:
+✅ **COMPLETED** - All critical GUI fixes successfully implemented and tested:
+
+1. **✅ QPainter.drawCircle Errors Fixed**
+   - Replaced `painter.drawCircle()` with `painter.drawEllipse()` in both CircularProgress and IndeterminateProgress classes
+   - Application now starts and renders without paint device errors
+   - All progress widgets render correctly
+
+2. **✅ Window Resizing Functionality Added**
+   - Implemented custom resize grips with 6-pixel margin detection
+   - Added 8-directional resize support (corners and edges)
+   - Added proper cursor feedback (resize cursors)
+   - Enforced minimum size constraints during resize
+   - Separated resize handling from title bar drag operations
+
+3. **✅ Title Bar Behavior Enhanced**
+   - Fixed double-click to properly toggle maximize/restore (Windows standard behavior)
+   - Added "snap-out" functionality when dragging maximized windows
+   - Prevented resize operations in title bar area
+   - Improved window dragging with proper position calculations
+
+4. **✅ Window Control Button Icons**
+   - Replaced text characters with proper vector icons
+   - Created minimize, maximize/restore, and close icons using QPainter
+   - Added dynamic icon switching (maximize ↔ restore based on window state)
+   - Connected window state change events to update icons appropriately
+   - Improved visual consistency with 16x16 icon size
+
+5. **✅ Notification System Fixed**
+   - Removed problematic shadow rendering causing "black shadows"
+   - Fixed positioning to account for title bar height (40px offset)
+   - Changed from separate window to proper child widget
+   - Added parent resize event filtering for dynamic repositioning
+   - Simplified paint event to prevent paint device destruction errors
+   - Maintained slide-in/slide-out animations
+
+**Testing Results:**
+- Application runs for 15+ minutes without crashes
+- All GUI interactions work correctly (resize, maximize, minimize, close)
+- Page navigation functions properly
+- Regular background operations continue normally
+- No QPainter or paint device errors in logs
+
+---
+
 ## Project Overview
 
 **MCP Commander** is a command-line tool designed to manage MCP (Model Context Protocol) servers across different code editors. It provides a unified interface for adding, removing, listing, and monitoring MCP server configurations across Claude Code, Claude Desktop, and Cursor.

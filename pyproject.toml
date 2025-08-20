@@ -56,6 +56,11 @@ build = [
     "build>=0.10.0",
     "twine>=4.0.0",
 ]
+gui = [
+    "PySide6>=6.5.0",
+    "qasync>=0.27.0",  # Async Qt support
+    "Pillow>=10.0.0",  # Image processing
+]
 
 [project.urls]
 Homepage = "https://github.com/nmindz/mcp-commander"

@@ -1223,6 +1223,60 @@ def help() -> None:
     app()
 
 
+@app.command()
+def gui(
+    config_path: Path | None = typer.Option(
+        None,
+        "--config",
+        "-c",
+        help="Path to configuration file",
+        exists=False,
+        dir_okay=False,
+        resolve_path=True,
+    ),
+    help: bool = typer.Option(
+        False,
+        "--help",
+        callback=help_callback,
+        expose_value=False,
+        is_eager=True,
+        help="Show this message and exit.",
+    ),
+) -> None:
+    """Launch the graphical user interface."""
+    try:
+        # Import GUI here to avoid dependency issues when GUI packages aren't installed
+        from mcpcommander.gui.main import run_gui
+        
+        console.print(f"🚀 Launching MCP Commander GUI...")
+        if config_path:
+            console.print(f"📁 Using config: {config_path}")
+        
+        # Run the GUI application
+        exit_code = run_gui(config_path)
+        sys.exit(exit_code)
+        
+    except ImportError as e:
+        console.print(f"""
+[red]{UNICODE_CHARS['cross']} GUI dependencies not installed[/red]
+
+The GUI requires additional dependencies. Install them with:
+
+    [cyan]pip install mcp-commander[gui][/cyan]
+
+Or if you're using the development version:
+
+    [cyan]pip install -e ".[gui]"[/cyan]
+
+Error details: {e}
+        """)
+        sys.exit(1)
+    except Exception as e:
+        console.print(f"[red]{UNICODE_CHARS['cross']} Failed to launch GUI: {e}[/red]")
+        logger.exception("GUI launch failed")
+        sys.exit(1)
+
+
 def main() -> None:
     """Entry point for the CLI application."""
     try:
