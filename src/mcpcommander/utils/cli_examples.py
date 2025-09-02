@@ -17,6 +17,7 @@ def get_command_examples() -> dict[str, list[str]]:
             'mcp add server ws-server "ws://localhost:8080/mcp" vscode',
             'mcp add server brave-search "npx -y @modelcontextprotocol/server-brave-search" --config custom.json',
             'mcp add server global-server "npx @modelcontextprotocol/server-filesystem /tmp" --all',
+            'mcp add server --all github \'{"transport": {"type": "http", "url": "https://api.githubcopilot.com/mcp/", "headers": {"Authorization": "Bearer $GITHUB_PAT"}}}\' --from-env=GITHUB_PAT',
             'mcp add editor windsurf "~/.codeium/windsurf/mcp_config.json" --jsonpath mcpServers',
         ],
         "remove": [

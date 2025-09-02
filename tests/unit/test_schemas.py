@@ -4,7 +4,109 @@ from pathlib import Path
 
 import pytest
 
-from mcpcommander.schemas.config_schema import EditorConfig, MCPCommanderConfig, ServerConfig
+from mcpcommander.schemas.config_schema import EditorConfig, MCPCommanderConfig, ServerConfig, HttpTransport
+
+
+class TestHttpTransport:
+    """Test HttpTransport schema."""
+
+    def test_valid_host_port_format(self):
+        """Test valid host/port HTTP transport configuration."""
+        transport = HttpTransport(host="localhost", port=3000)
+        assert transport.type == "http"
+        assert transport.host == "localhost"
+        assert transport.port == 3000
+        assert transport.path == "/mcp"  # Default value
+        assert transport.url is None
+        assert transport.headers is None
+
+    def test_valid_url_format(self):
+        """Test valid URL-based HTTP transport configuration."""
+        transport = HttpTransport(url="https://api.github.com/mcp/")
+        assert transport.type == "http"
+        assert transport.url == "https://api.github.com/mcp/"
+        assert transport.host is None
+        assert transport.port is None
+        assert transport.headers is None
+
+    def test_valid_url_format_with_headers(self):
+        """Test valid URL-based HTTP transport with headers."""
+        transport = HttpTransport(
+            url="https://api.github.com/mcp/",
+            headers={"Authorization": "Bearer token123"}
+        )
+        assert transport.type == "http"
+        assert transport.url == "https://api.github.com/mcp/"
+        assert transport.headers == {"Authorization": "Bearer token123"}
+
+    def test_github_mcp_server_format(self):
+        """Test GitHub MCP server configuration format."""
+        transport = HttpTransport(
+            url="https://api.githubcopilot.com/mcp/",
+            headers={"Authorization": "Bearer $GITHUB_PAT"}
+        )
+        assert transport.type == "http"
+        assert transport.url == "https://api.githubcopilot.com/mcp/"
+        assert transport.headers == {"Authorization": "Bearer $GITHUB_PAT"}
+
+    def test_missing_both_url_and_host_port_fails(self):
+        """Test that missing both URL and host/port fails validation."""
+        with pytest.raises(ValueError, match="Must specify either 'url' or both 'host' and 'port'"):
+            HttpTransport()
+
+    def test_missing_port_with_host_fails(self):
+        """Test that providing host without port fails validation."""
+        with pytest.raises(ValueError, match="Must specify either 'url' or both 'host' and 'port'"):
+            HttpTransport(host="localhost")
+
+    def test_missing_host_with_port_fails(self):
+        """Test that providing port without host fails validation."""
+        with pytest.raises(ValueError, match="Must specify either 'url' or both 'host' and 'port'"):
+            HttpTransport(port=3000)
+
+    def test_both_url_and_host_port_fails(self):
+        """Test that providing both URL and host/port fails validation."""
+        with pytest.raises(ValueError, match="Cannot specify both 'url' and 'host'/'port'"):
+            HttpTransport(url="https://api.github.com/mcp/", host="localhost", port=3000)
+
+    def test_invalid_port_range(self):
+        """Test invalid port range validation."""
+        with pytest.raises(ValueError, match="Port must be between 1 and 65535"):
+            HttpTransport(host="localhost", port=0)
+        
+        with pytest.raises(ValueError, match="Port must be between 1 and 65535"):
+            HttpTransport(host="localhost", port=65536)
+
+    def test_invalid_url_scheme(self):
+        """Test invalid URL scheme validation."""
+        with pytest.raises(ValueError, match="HTTP URL must start with http:// or https://"):
+            HttpTransport(url="ftp://api.github.com/mcp/")
+        
+        with pytest.raises(ValueError, match="HTTP URL must start with http:// or https://"):
+            HttpTransport(url="ws://api.github.com/mcp/")
+
+    def test_model_dump_excludes_none_values(self):
+        """Test that model_dump excludes None values."""
+        # URL-based format
+        transport_url = HttpTransport(url="https://api.github.com/mcp/")
+        dumped = transport_url.model_dump(exclude_none=True)
+        expected = {
+            "type": "http",
+            "url": "https://api.github.com/mcp/",
+            "path": "/mcp"
+        }
+        assert dumped == expected
+
+        # Host/port format
+        transport_host_port = HttpTransport(host="localhost", port=3000)
+        dumped = transport_host_port.model_dump(exclude_none=True)
+        expected = {
+            "type": "http",
+            "host": "localhost",
+            "port": 3000,
+            "path": "/mcp"
+        }
+        assert dumped == expected
 
 
 class TestServerConfig:
@@ -153,3 +255,48 @@ class TestMCPCommanderConfig:
         config = MCPCommanderConfig(editors={})
         assert config.editors == {}
         assert config.get_editor_names() == []
+
+    def test_server_config_with_http_transport_url(self):
+        """Test ServerConfig with HTTP transport using URL format."""
+        transport = HttpTransport(
+            url="https://api.githubcopilot.com/mcp/",
+            headers={"Authorization": "Bearer $GITHUB_PAT"}
+        )
+        config = ServerConfig(transport=transport, env={"GITHUB_PAT": "ghp_token123"})
+        
+        assert config.transport == transport
+        assert config.command is None
+        assert config.env == {"GITHUB_PAT": "ghp_token123"}
+        
+        # Test dict output format
+        config_dict = config.dict()
+        expected = {
+            "transport": {
+                "type": "http",
+                "url": "https://api.githubcopilot.com/mcp/",
+                "headers": {"Authorization": "Bearer $GITHUB_PAT"},
+                "path": "/mcp"
+            },
+            "env": {"GITHUB_PAT": "ghp_token123"}
+        }
+        assert config_dict == expected
+
+    def test_server_config_with_http_transport_host_port(self):
+        """Test ServerConfig with HTTP transport using host/port format."""
+        transport = HttpTransport(host="localhost", port=3000, path="/api/mcp")
+        config = ServerConfig(transport=transport)
+        
+        assert config.transport == transport
+        assert config.command is None
+        
+        # Test dict output format
+        config_dict = config.dict()
+        expected = {
+            "transport": {
+                "type": "http",
+                "host": "localhost",
+                "port": 3000,
+                "path": "/api/mcp"
+            }
+        }
+        assert config_dict == expected

@@ -8,18 +8,51 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class HttpTransport(BaseModel):
-    """Schema for HTTP transport configuration."""
+    """Schema for HTTP transport configuration.
+    
+    Supports two formats:
+    1. Traditional: {type: "http", host: "localhost", port: 3000, path: "/mcp"}
+    2. URL-based: {type: "http", url: "https://api.example.com/mcp/", headers: {...}}
+    """
 
     type: Literal["http"] = "http"
-    host: str = Field(..., description="HTTP host")
-    port: int = Field(..., description="HTTP port")
+    
+    # Traditional format fields (optional when using URL format)
+    host: str | None = Field(None, description="HTTP host")
+    port: int | None = Field(None, description="HTTP port")
     path: str = Field("/mcp", description="HTTP path")
+    
+    # URL-based format fields (optional when using traditional format)
+    url: str | None = Field(None, description="Full HTTP URL")
+    headers: dict[str, str] | None = Field(None, description="HTTP headers")
 
     @field_validator("port")
-    def validate_port(cls, v: int) -> int:
-        if not 1 <= v <= 65535:
+    @classmethod
+    def validate_port(cls, v: int | None) -> int | None:
+        if v is not None and not 1 <= v <= 65535:
             raise ValueError("Port must be between 1 and 65535")
         return v
+
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, v: str | None) -> str | None:
+        if v is not None and not v.startswith(("http://", "https://")):
+            raise ValueError("HTTP URL must start with http:// or https://")
+        return v
+
+    @model_validator(mode="after")
+    def validate_http_config(self) -> "HttpTransport":
+        """Validate that either URL or host/port is specified."""
+        has_url = self.url is not None
+        has_host_port = self.host is not None and self.port is not None
+        
+        if not has_url and not has_host_port:
+            raise ValueError("Must specify either 'url' or both 'host' and 'port' for HTTP transport")
+        
+        if has_url and has_host_port:
+            raise ValueError("Cannot specify both 'url' and 'host'/'port'. Use one format or the other")
+        
+        return self
 
 
 class WebSocketTransport(BaseModel):

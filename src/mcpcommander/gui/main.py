@@ -50,6 +50,7 @@ class TitleBar(QFrame):
         self.setObjectName("titleBar")
         self.setup_ui()
         self.drag_position = QPoint()
+        self.resize_margin = 10  # Match main window's resize margin
 
     def setup_ui(self) -> None:
         """Set up the title bar UI."""
@@ -183,20 +184,23 @@ class TitleBar(QFrame):
         else:
             self.maximize_btn.setIcon(QIcon(self._create_maximize_icon()))
 
+    def _is_in_resize_area(self, pos: QPoint) -> bool:
+        """Check if position is in a resize area."""
+        return (pos.x() <= self.resize_margin or 
+                pos.x() >= self.width() - self.resize_margin or 
+                pos.y() <= self.resize_margin)
+
     def mousePressEvent(self, event) -> None:
         """Handle mouse press for window dragging."""
         if event.button() == Qt.LeftButton:
             pos = event.position().toPoint()
             
-            # Check if click is in resize margin area (let main window handle it)
-            resize_margin = 10
-            if (pos.x() <= resize_margin or pos.x() >= self.width() - resize_margin or 
-                pos.y() <= resize_margin):
-                # In resize area - ignore event so main window can handle it
+            # Completely ignore events in resize areas
+            if self._is_in_resize_area(pos):
                 event.ignore()
                 return
             
-            # Only start dragging if window is not maximized and not in resize area
+            # Only start dragging if window is not maximized
             if not self.window().isMaximized():
                 self.drag_position = event.globalPosition().toPoint() - self.window().frameGeometry().topLeft()
                 event.accept()
@@ -205,16 +209,14 @@ class TitleBar(QFrame):
 
     def mouseMoveEvent(self, event) -> None:
         """Handle mouse move for window dragging."""
-        if event.buttons() == Qt.LeftButton and not self.drag_position.isNull():
-            pos = event.position().toPoint()
-            resize_margin = 10
+        pos = event.position().toPoint()
+        
+        # Always ignore events in resize areas
+        if self._is_in_resize_area(pos):
+            event.ignore()
+            return
             
-            # Don't handle move if in resize area
-            if (pos.x() <= resize_margin or pos.x() >= self.width() - resize_margin or 
-                pos.y() <= resize_margin):
-                event.ignore()
-                return
-                
+        if event.buttons() == Qt.LeftButton and not self.drag_position.isNull():
             # If window was maximized and user drags, restore it first
             if self.window().isMaximized():
                 # Calculate new position to center the window under the cursor
@@ -240,11 +242,9 @@ class TitleBar(QFrame):
         """Handle double-click to maximize/restore (Windows standard behavior)."""
         if event.button() == Qt.LeftButton:
             pos = event.position().toPoint()
-            resize_margin = 10
             
             # Don't handle double-click if in resize area
-            if (pos.x() <= resize_margin or pos.x() >= self.width() - resize_margin or 
-                pos.y() <= resize_margin):
+            if self._is_in_resize_area(pos):
                 event.ignore()
                 return
                 
@@ -471,14 +471,15 @@ class MCPCommanderGUI(QMainWindow):
             self.resize_direction = self._get_resize_direction(pos)
             
             if self.resize_direction:
-                # Allow resize from anywhere, including title bar edges
+                # Clear any cursor overrides and start resize
+                app = QApplication.instance()
+                if app:
+                    app.restoreOverrideCursor()
+                
                 self.resize_start_pos = event.globalPosition().toPoint()
                 self.resize_start_geometry = self.geometry()
+                self.grabMouse()  # Ensure we capture all mouse events during resize
                 event.accept()
-                return
-            elif pos.y() <= 40:  
-                # Only allow title bar dragging if NOT in resize area
-                super().mousePressEvent(event)
                 return
         
         super().mousePressEvent(event)
@@ -531,9 +532,14 @@ class MCPCommanderGUI(QMainWindow):
 
     def mouseReleaseEvent(self, event) -> None:
         """Handle mouse release to end resizing."""
-        if event.button() == Qt.LeftButton:
+        if event.button() == Qt.LeftButton and self.resize_direction:
             self.resize_direction = None
-            # Don't reset cursor here, let mouseMoveEvent handle it
+            self.releaseMouse()  # Release mouse grab
+            
+            # Clear any cursor overrides
+            app = QApplication.instance()
+            if app:
+                app.restoreOverrideCursor()
         
         super().mouseReleaseEvent(event)
 

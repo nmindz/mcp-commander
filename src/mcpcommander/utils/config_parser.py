@@ -113,13 +113,12 @@ class ServerConfigParser:
             if any(indicator in url.lower() for indicator in sse_indicators):
                 return {"transport": {"type": "sse", "url": url}}
             else:
-                # Default to HTTP transport for other HTTPS URLs
+                # Use URL-based HTTP transport format to preserve the full URL
+                # This supports the GitHub MCP server format and similar services
                 return {
                     "transport": {
                         "type": "http",
-                        "host": parsed.hostname or "localhost",
-                        "port": parsed.port or (443 if parsed.scheme == "https" else 80),
-                        "path": parsed.path or "/mcp",
+                        "url": url,
                     }
                 }
         else:
@@ -230,8 +229,23 @@ def create_example_configs() -> dict[str, dict[str, Any]]:
             "args": ["-y", "@modelcontextprotocol/server-brave-search"],
             "env": {"BRAVE_API_KEY": "your-api-key"},
         },
-        "http-transport": {
+        "http-transport-host-port": {
             "transport": {"type": "http", "host": "localhost", "port": 3000, "path": "/mcp"}
+        },
+        "http-transport-url": {
+            "transport": {
+                "type": "http", 
+                "url": "https://api.github.com/mcp/",
+                "headers": {"Authorization": "Bearer ${GITHUB_PAT}"}
+            }
+        },
+        "github-mcp-server": {
+            "transport": {
+                "type": "http", 
+                "url": "https://api.githubcopilot.com/mcp/",
+                "headers": {"Authorization": "Bearer $GITHUB_PAT"}
+            },
+            "env": {"GITHUB_PAT": "your-github-token"}
         },
         "websocket-transport": {
             "transport": {
