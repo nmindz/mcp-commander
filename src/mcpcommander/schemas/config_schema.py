@@ -20,7 +20,7 @@ class HttpTransport(BaseModel):
     # Traditional format fields (optional when using URL format)
     host: str | None = Field(None, description="HTTP host")
     port: int | None = Field(None, description="HTTP port")
-    path: str = Field("/mcp", description="HTTP path")
+    path: str | None = Field(None, description="HTTP path (only for host/port format)")
     
     # URL-based format fields (optional when using traditional format)
     url: str | None = Field(None, description="Full HTTP URL")
@@ -51,6 +51,10 @@ class HttpTransport(BaseModel):
         
         if has_url and has_host_port:
             raise ValueError("Cannot specify both 'url' and 'host'/'port'. Use one format or the other")
+        
+        # Set default path for host/port format, but not for URL format
+        if has_host_port and self.path is None:
+            self.path = "/mcp"
         
         return self
 
@@ -150,10 +154,9 @@ class ServerConfig(BaseModel):
             if self.transport.env:
                 result["env"] = self.transport.env
         else:
-            # For other transports, use the transport object
-            result = {
-                "transport": self.transport.model_dump(exclude_none=True) if self.transport else {}
-            }
+            # For HTTP, WebSocket, and SSE transports, flatten the transport properties
+            # This matches the expected MCP configuration format
+            result = self.transport.model_dump(exclude_none=True) if self.transport else {}
             if self.env:
                 result["env"] = self.env
 

@@ -27,6 +27,7 @@ class TestHttpTransport:
         assert transport.url == "https://api.github.com/mcp/"
         assert transport.host is None
         assert transport.port is None
+        assert transport.path is None  # No path for URL format
         assert transport.headers is None
 
     def test_valid_url_format_with_headers(self):
@@ -92,8 +93,7 @@ class TestHttpTransport:
         dumped = transport_url.model_dump(exclude_none=True)
         expected = {
             "type": "http",
-            "url": "https://api.github.com/mcp/",
-            "path": "/mcp"
+            "url": "https://api.github.com/mcp/"
         }
         assert dumped == expected
 
@@ -268,15 +268,12 @@ class TestMCPCommanderConfig:
         assert config.command is None
         assert config.env == {"GITHUB_PAT": "ghp_token123"}
         
-        # Test dict output format
+        # Test dict output format - should be flattened, not wrapped in "transport"
         config_dict = config.dict()
         expected = {
-            "transport": {
-                "type": "http",
-                "url": "https://api.githubcopilot.com/mcp/",
-                "headers": {"Authorization": "Bearer $GITHUB_PAT"},
-                "path": "/mcp"
-            },
+            "type": "http",
+            "url": "https://api.githubcopilot.com/mcp/",
+            "headers": {"Authorization": "Bearer $GITHUB_PAT"},
             "env": {"GITHUB_PAT": "ghp_token123"}
         }
         assert config_dict == expected
@@ -289,14 +286,12 @@ class TestMCPCommanderConfig:
         assert config.transport == transport
         assert config.command is None
         
-        # Test dict output format
+        # Test dict output format - should be flattened, not wrapped in "transport"
         config_dict = config.dict()
         expected = {
-            "transport": {
-                "type": "http",
-                "host": "localhost",
-                "port": 3000,
-                "path": "/api/mcp"
-            }
+            "type": "http",
+            "host": "localhost",
+            "port": 3000,
+            "path": "/api/mcp"
         }
         assert config_dict == expected
