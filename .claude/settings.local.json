@@ -11,7 +11,8 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "mcp__desktop-commander__create_directory",
-      "Bash(mcp:*)"
+      "Bash(mcp:*)",
+      "Bash(python:*)"
     ],
     "deny": [],
     "ask": []

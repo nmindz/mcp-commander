@@ -27,7 +27,9 @@ class ServerConfigParser:
 
     @staticmethod
     def parse_server_config(
-        config_input: str | dict[str, Any], env_vars: dict[str, str] | None = None
+        config_input: str | dict[str, Any],
+        env_vars: dict[str, str] | None = None,
+        headers: dict[str, str] | None = None
     ) -> ServerConfig:
         """Parse server configuration from various input formats.
 
@@ -40,6 +42,7 @@ class ServerConfigParser:
         Args:
             config_input: Configuration input in various formats
             env_vars: Optional environment variables to add to the configuration
+            headers: Optional HTTP headers to add to transport configuration
 
         Returns:
             Validated ServerConfig object
@@ -67,6 +70,20 @@ class ServerConfigParser:
                     config_dict["env"] = merged_env
                 else:
                     config_dict["env"] = env_vars
+
+            # Add headers if provided and transport section exists
+            if headers and "transport" in config_dict:
+                transport = config_dict["transport"]
+                if isinstance(transport, dict):
+                    # Merge with existing headers if any
+                    existing_headers = transport.get("headers", {})
+                    if existing_headers:
+                        # CLI options override existing headers
+                        merged_headers = existing_headers.copy()
+                        merged_headers.update(headers)
+                        transport["headers"] = merged_headers
+                    else:
+                        transport["headers"] = headers
 
             # Create and validate ServerConfig
             return ServerConfig(**config_dict)
@@ -241,11 +258,11 @@ def create_example_configs() -> dict[str, dict[str, Any]]:
         },
         "github-mcp-server": {
             "transport": {
-                "type": "http", 
+                "type": "http",
                 "url": "https://api.githubcopilot.com/mcp/",
-                "headers": {"Authorization": "Bearer $GITHUB_PAT"}
+                "headers": {"Authorization": "Bearer $GITHUB_MCP_PAT"}
             },
-            "env": {"GITHUB_PAT": "your-github-token"}
+            "env": {"GITHUB_MCP_PAT": "your-github-token"}
         },
         "websocket-transport": {
             "transport": {

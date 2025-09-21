@@ -37,11 +37,12 @@ class MCPManager:
         server_config: str | dict[str, Any],
         editor_name: str | None = None,
         env_vars: dict[str, str] | None = None,
+        headers: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         """Add a server to specified editors or all editors."""
         try:
             # Parse and validate server configuration
-            validated_config = ServerConfigParser.parse_server_config(server_config, env_vars)
+            validated_config = ServerConfigParser.parse_server_config(server_config, env_vars, headers)
 
             # Get target editors
             target_editors = self._get_target_editors(editor_name)
@@ -85,6 +86,7 @@ class MCPManager:
         server_name: str,
         server_config: str | dict[str, Any],
         env_vars: dict[str, str] | None = None,
+        headers: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         """Add a server to ALL discovered MCP configurations on the system."""
         logger.info(f"Adding server '{server_name}' to all discovered MCP configurations")
@@ -110,7 +112,7 @@ class MCPManager:
             )
 
             # Parse and validate server configuration
-            validated_config = ServerConfigParser.parse_server_config(server_config, env_vars)
+            validated_config = ServerConfigParser.parse_server_config(server_config, env_vars, headers)
 
             results = {}
             successful = []

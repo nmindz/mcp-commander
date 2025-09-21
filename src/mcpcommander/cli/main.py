@@ -131,6 +131,38 @@ def _process_environment_options(
     return env_vars
 
 
+def _process_header_options(header_list: builtins.list[str]) -> builtins.dict[str, str]:
+    """Process --header options into header dictionary.
+
+    Args:
+        header_list: List of KEY:value pairs for HTTP headers
+
+    Returns:
+        Dictionary of HTTP headers
+
+    Raises:
+        typer.BadParameter: If header parsing fails
+    """
+    headers: dict[str, str] = {}
+
+    for header_pair in header_list:
+        if ":" not in header_pair:
+            raise typer.BadParameter(
+                f"Invalid --header format '{header_pair}'. Expected KEY:value format."
+            )
+
+        key, value = header_pair.split(":", 1)
+        key = key.strip()
+        value = value.strip()
+
+        if not key:
+            raise typer.BadParameter(f"Empty key in --header option '{header_pair}'")
+
+        headers[key] = value
+
+    return headers
+
+
 def help_callback(ctx: typer.Context, param: typer.CallbackParam, value: bool) -> None:
     """Custom help callback that always shows complete help with examples."""
     if not value:
@@ -171,6 +203,9 @@ def add_server(
     env: builtins.list[str] = typer.Option(
         [], "--env", help="Environment variable in KEY:value format (can be used multiple times)"
     ),
+    header: builtins.list[str] = typer.Option(
+        [], "--header", help="HTTP header in KEY:value format (can be used multiple times)"
+    ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable debug logging"),
     help: bool = typer.Option(
         False,
@@ -189,10 +224,13 @@ def add_server(
         # Process environment variable options
         env_vars = _process_environment_options(from_env, env)
 
+        # Process header options
+        headers = _process_header_options(header)
+
         manager = MCPManager(config)
 
         if all_editors:
-            result = manager.add_server_to_all_discovered(server_name, server_config, env_vars)
+            result = manager.add_server_to_all_discovered(server_name, server_config, env_vars, headers)
 
             if result["discovered_count"] == 0:
                 print(
@@ -212,7 +250,7 @@ def add_server(
             else:
                 raise typer.Exit(1)
         else:
-            result = manager.add_server(server_name, server_config, editor, env_vars)
+            result = manager.add_server(server_name, server_config, editor, env_vars, headers)
 
             if not result["failed"]:
                 target = editor or "all configured editors"
